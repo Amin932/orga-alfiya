@@ -1,8 +1,8 @@
-# Orga Alfiya — blocs 1 à 5
+# Orga Alfiya — blocs 1 à 6
 
 Application d'organisation du BDE Alfiya, hébergée sur NAS Synology, accessible à terme sur `https://orga-alfiya.amvei.synology.me/`.
 
-## Fonctionnalités disponibles (blocs 1 à 5)
+## Fonctionnalités disponibles (blocs 1 à 6)
 
 - Invitation **uniquement par le super-administrateur** ; lien individuel à usage unique valable 7 jours.
 - Le membre renseigne son nom, son prénom et choisit son premier pôle parmi ceux des projets autorisés.
@@ -43,6 +43,19 @@ Application d'organisation du BDE Alfiya, hébergée sur NAS Synology, accessibl
 
 **Actions manuelles à ce stade :** Google Agenda et Eventbrite figurent dans les checklists mais ne sont pas encore reliés automatiquement ; l'envoi de messages de restriction à des participants n'est jamais déclenché automatiquement.
 
+### Bloc 6 — Collaboration et documents
+
+- Commentaires par carte avec **nom et prénom de l'auteur**, sa couleur issue du **premier pôle attribué**, et date de publication.
+- Chaque membre peut modifier ou supprimer **ses propres commentaires** ; le super-administrateur peut supprimer ceux des autres membres.
+- Mentions sélectionnables depuis la liste des **membres et pôles du même projet**, enregistrées avec leurs identifiants et vérifiées côté serveur. **Les notifications de mentions arrivent au bloc 7**.
+- Ajout de photos et documents aux cartes avec stockage privé dans le volume Docker `uploads` sur le NAS. Formats acceptés : JPG/JPEG, PNG, WebP, GIF, PDF, DOCX, XLSX, PPTX et TXT ; limite **15 Mo par fichier**, 40 fichiers par carte.
+- Les fichiers sont servis par l'API **uniquement si la session dispose d'un accès au projet**. Les images peuvent être choisies comme couverture : elles apparaissent en haut des cartes Kanban.
+- Les fichiers peuvent être retirés par leur auteur ou le super-administrateur. La suppression définitive d'une carte efface également ses fichiers du volume après validation de la transaction.
+- Journal d'activité pour les créations, modifications, déplacements, mises à la corbeille, restaurations, attributions, commentaires, pièces jointes, couvertures et checklists.
+- Protection contre la suppression d'un pôle contenant encore des cartes, y compris dans la corbeille.
+
+**À noter :** l'affichage des commentaires et documents ne nécessite aucun service externe. Les notifications automatiques et les envois de courriels pour les mentions ne sont pas encore actifs. Des tests d'intégration PostgreSQL/Docker et une vérification de sécurité restent nécessaires avant une ouverture publique. Les fichiers téléchargés ne sont pas analysés par antivirus dans cette version : ne partagez que des documents de sources fiables et prévoyez une analyse antivirus avant le déploiement en production.
+
 ## Configuration sur Synology
 
 1. Cloner `https://github.com/Amin932/orga-alfiya.git` dans `/volume1/docker/orga-alfiya`.
@@ -61,7 +74,7 @@ Le domaine visé peut nécessiter une configuration réseau complémentaire selo
 
 ## À compléter aux prochains blocs
 
-- Commentaires, pièces jointes et images de couverture, historique des modifications (corbeille déjà disponible).
-- Édition avancée des tâches des checklists et amélioration de l'ergonomie.
+- Historique et commentaires enrichis, amélioration de l'ergonomie et tests d'intégration réels.
+- Prévoir une analyse antivirus des pièces jointes avant l'ouverture aux membres.
 - Notifications internes, SMTP et push, rappels d'échéance.
 - Tests d'intégration et revue de sécurité avant ouverture aux 25 membres.
