@@ -1,8 +1,8 @@
-# Orga Alfiya — blocs 1 à 3
+# Orga Alfiya — blocs 1 à 4
 
 Application d'organisation du BDE Alfiya, hébergée sur NAS Synology, accessible à terme sur `https://orga-alfiya.amvei.synology.me/`.
 
-## Fondations disponibles (blocs 1 à 3)
+## Fonctionnalités disponibles (blocs 1 à 4)
 
 - Invitation **uniquement par le super-administrateur** ; lien individuel à usage unique valable 7 jours.
 - Le membre renseigne son nom, son prénom et choisit son premier pôle parmi ceux des projets autorisés.
@@ -15,7 +15,18 @@ Application d'organisation du BDE Alfiya, hébergée sur NAS Synology, accessibl
 - Accès aux projets filtré **côté API**, sans droit sur les projets non autorisés.
 - PostgreSQL (comptes, invitations, sessions et affectations). Secrets de session stockés **hachés**.
 
-Les cartes Kanban et leurs données ne sont **pas encore actives** : elles seront implémentées dans les blocs suivants. La page des tableaux est un squelette, non un outil de suivi fonctionnel.
+### Bloc 4 — Tableaux Kanban
+
+- Cartes réelles stockées dans PostgreSQL, visibles uniquement depuis les pôles de projets autorisés.
+- Colonnes **À faire / En cours / Terminé**, ordre manuel enregistré, déplacement par glisser-déposer (souris, appui prolongé tactile et clavier).
+- Création rapide dans chaque colonne : **seul le titre est obligatoire**. Choix entre saisie libre et les deux types officiels (« avec intervenant » / « sans intervenant ») ; le contenu structuré des modèles sera ajouté au bloc 5.
+- Modification ultérieure du titre, de la description, de la date de début et de la date d'échéance, sans obligation de compléter immédiatement.
+- Attribution de plusieurs membres déjà autorisés au projet ; étiquette couleur liée au premier pôle de chaque membre.
+- Filtres **indépendants par colonne** : titre, plage de dates (début ou échéance), tri alphabétique ou chronologique. Les filtres ne suppriment jamais de cartes.
+- Mise à la corbeille réservée au **créateur** ou au **super-admin** ; restauration et suppression définitive réservées au super-admin dans l'onglet Corbeille.
+- Création et modifications vérifiées côté API ; protection des projets non autorisés et vérification des requêtes mutantes.
+
+**Limites actuelles :** les champs spécialisés et checklists des modèles, le chargement d'images, les commentaires, l'historique et les notifications arriveront dans les prochains blocs. Une carte choisissant un modèle conserve actuellement sa référence au modèle, mais n'affiche pas encore les champs préremplis. Les tableaux sont fonctionnels une fois déployés sur une base PostgreSQL, mais des tests d'utilisation sur ton NAS restent nécessaires.
 
 ## Configuration sur Synology
 
@@ -35,7 +46,7 @@ Le domaine visé peut nécessiter une configuration réseau complémentaire selo
 
 ## À compléter aux prochains blocs
 
-- Cartes, glisser-déposer sur ordinateur et mobile, filtres, gestion des modèles.
+- Champs structurés des modèles officiels et bibliothèque de modèles personnalisés.
 - Checklists, commentaires, fichiers, historique et corbeille.
 - Notifications internes, SMTP et push, rappels d'échéance.
 - Tests d'intégration et revue de sécurité avant ouverture aux 25 membres.
