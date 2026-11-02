@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
-import { ArrowRight, Bell, ChevronRight, FolderKanban, LayoutGrid, ShieldCheck, Users } from 'lucide-react'
+import { ArrowRight, ChevronRight, FolderKanban, LayoutGrid, ShieldCheck, Users } from 'lucide-react'
 import KanbanBoard from './KanbanBoard'
+import NotificationsV7 from './NotificationsV7'
 import { TemplateLibrary } from './TemplatesV5'
 import { BookOpen } from 'lucide-react'
 
@@ -22,7 +23,15 @@ export default function App({ viewer, onAdmin }: { viewer: Viewer; onAdmin?: () 
         if (!response.ok) throw new Error('Impossible de charger vos projets')
         return response.json() as Promise<{ projects: Project[] }>
       })
-      .then(data => { if (active) setProjects(data.projects) })
+      .then(data => { if (active) {
+          setProjects(data.projects)
+          const query=new URLSearchParams(window.location.search)
+          const projectId=Number(query.get('project')),poleId=Number(query.get('pole'))
+          const match=data.projects.find(p=>p.id===projectId)
+          if (match && match.poles.some(p=>p.id===poleId)) {
+            setProjectId(projectId);setPoleId(poleId)
+          }
+        } })
       .catch(e => { if (active) setError(e instanceof Error ? e.message : 'Erreur de chargement') })
       .finally(() => { if (active) setLoading(false) })
     return () => { active = false }
@@ -41,7 +50,7 @@ export default function App({ viewer, onAdmin }: { viewer: Viewer; onAdmin?: () 
       <div className="topbar-actions">
         <span className="service online"><span className="status-dot"/> Espace membres</span>
         <button className="quiet-button" onClick={() => setLibraryOpen(open => !open)} title="Bibliothèque commune de modèles"><BookOpen size={17}/> Modèles</button>
-        <button className="icon-button" disabled title="Notifications au bloc 7" aria-label="Notifications à venir"><Bell size={18}/></button>
+        <NotificationsV7/>
         {onAdmin && <button className="icon-button" onClick={onAdmin} aria-label="Administration"><ShieldCheck size={19}/></button>}
         <span className="user-avatar" style={{ backgroundColor: viewer.primaryColor ?? undefined }} title={viewer.email}>{(viewer.first_name || viewer.email)[0].toUpperCase()}</span>
       </div>
