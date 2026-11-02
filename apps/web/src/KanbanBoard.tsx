@@ -9,13 +9,14 @@ import { CSS } from '@dnd-kit/utilities'
 import { CalendarDays, Check, ChevronDown, GripVertical, Plus, Search, Trash2, Users, X } from 'lucide-react'
 import './kanban.css'
 import { CardTemplateContent, listTemplates, type Template as LibraryTemplate } from './TemplatesV5'
+import CollaborationV6 from './CollaborationV6'
 
 type Status = 'todo' | 'progress' | 'done'
 type Template = 'free' | 'speaker' | 'no_speaker'
 type Member = { id: number; first_name: string; last_name: string; color: string | null }
 type Card = {
   id: number; title: string; description: string; status: Status; position: number;
-  start_date: string | null; due_date: string | null; template_key: Template; template_id: number | null;
+  start_date: string | null; due_date: string | null; template_key: Template; template_id: number | null; cover_attachment_id: number | null;
   created_by: number; author_first_name?: string; author_last_name?: string;
   assignees: Member[];
 }
@@ -43,6 +44,7 @@ async function api<T>(path: string, method: 'GET' | 'POST' | 'PATCH' | 'PUT' = '
 
 function CardFace({ card, onClick, dragging = false }: { card: Card; onClick?: () => void; dragging?: boolean }) {
   return <div className={'kb-card-face' + (dragging ? ' kb-floating' : '')}>
+    {card.cover_attachment_id && <img className="co-cover-mini" loading="lazy" src={'/api/cards/' + card.id + '/attachments/' + card.cover_attachment_id} alt="" />}
     {onClick ? <button type="button" className="kb-card-main" onClick={onClick}>
       <strong>{card.title}</strong>
       <span className="kb-card-meta">
@@ -113,6 +115,7 @@ export default function KanbanBoard({ poleId, projectId, viewer }: Props) {
   const load = useCallback(async () => {
     const result = await api<{ cards: Card[] }>('/api/poles/' + poleId + '/cards')
     setCards(result.cards)
+    return result.cards
   }, [poleId])
   useEffect(() => {
     let active = true
@@ -262,6 +265,7 @@ export default function KanbanBoard({ poleId, projectId, viewer }: Props) {
           <button className="primary-button" disabled={busy || !draft.title.trim()}><Check size={16}/> Enregistrer</button>
         </form>
         <CardTemplateContent cardId={opened.id}/>
+        <CollaborationV6 cardId={opened.id} projectId={Number(projectId)} viewer={viewer} onChanged={async () => { const latest=await load(); setOpened(previous => previous ? latest.find(c=>c.id===previous.id) ?? previous : null) }}/>
         <div className="kb-assign"><h3><Users size={17}/> Responsables</h3><div className="kb-member-list">{members.map(m =>
           <label key={m.id}><input type="checkbox" disabled={busy} checked={opened.assignees.some(a => a.id === m.id)} onChange={e => void assign(m.id,e.target.checked)}/><span className="kb-person-tag" style={{ borderColor: m.color || '#c4b2a5' }}>{fullName(m)}</span></label>)}
           {!members.length && <p>Aucun membre disponible.</p>}</div></div>
