@@ -26,17 +26,23 @@ def connection():
 
 def enqueue_due_reminders(conn, local_date):
     """Can run repeatedly; per recipient/card/deadline/phase unique key avoids repeats."""
-    events=((3,"reminder","Échéance dans 3 jours","J-3"),
+    events=((7,"reminder","Échéance dans 7 jours","J-7"),
+            (3,"reminder","Échéance dans 3 jours","J-3"),
             (1,"reminder","Échéance demain","J-1"),
             (0,"reminder","Échéance aujourd'hui","J0"),
             (-1,"overdue","Échéance dépassée","J+1"))
     # Short transactions, avoid delaying deliveries.
     for offset,event,title,phase in events:
         deadline=local_date+timedelta(days=offset)
-        cards=conn.execute("""SELECT c.id,c.title,c.due_date FROM cards c
+        cards=conn.execute("""SELECT c.id,c.title,c.due_date,
+            r.days_before,r.overdue_next_day FROM cards c
+            LEFT JOIN card_reminder_settings r ON r.card_id=c.id
             WHERE c.deleted_at IS NULL AND c.status!='done' AND c.due_date=%s""",
             (deadline,)).fetchall()
         for card in cards:
+            days = card["days_before"] if card["days_before"] is not None else [3,1,0]
+            if offset>=0 and offset not in days: continue
+            if offset==-1 and card["overdue_next_day"] is False: continue
             member_ids={r["user_id"] for r in conn.execute("""SELECT ca.user_id FROM card_assignees ca
                 JOIN users u ON u.id=ca.user_id WHERE ca.card_id=%s AND u.active=true""",
                 (card["id"],)).fetchall()}
@@ -123,9 +129,18 @@ def process_deliveries(limit=25):
                 attempts=attempts+1 WHERE id=%s""",(row["id"],))
             prefs=preference(conn,row["user_id"])
             link=card_url(conn,row["card_id"])
+            access_ok=True
+            if row["card_id"] is not None:
+                access_ok=bool(conn.execute("""SELECT 1 FROM cards c
+                    JOIN poles p ON p.id=c.pole_id
+                    LEFT JOIN project_access a ON a.project_id=p.project_id AND a.user_id=%s
+                    JOIN users u ON u.id=%s
+                    WHERE c.id=%s AND c.deleted_at IS NULL
+                        AND (u.role='superadmin' OR a.user_id IS NOT NULL)""",
+                        (row["user_id"],row["user_id"],row["card_id"])).fetchone())
         failure=None
         try:
-            if not row["active"] or not prefs["events"].get(row["event_type"],True) or not prefs[row["channel"]+"_enabled"]:
+            if not row["active"] or not access_ok or not prefs["events"].get(row["event_type"],True) or not prefs[row["channel"]+"_enabled"]:
                 raise ValueError("Notifications désactivées ou compte inactif")
             if row["channel"]=="email":
                 smtp_send(row["email"],"Orga Alfiya — "+row["title"],row["message"]+"\n\nAccéder à Orga Alfiya : "+link)
