@@ -4,7 +4,7 @@ set -eu
 umask 077
 cd "$(dirname "$0")/.."
 timestamp="$(date -u +%Y%m%dT%H%M%SZ)"
-backup_dir="\${BACKUP_DIR:-$(pwd)/backups}"
+backup_dir="${BACKUP_DIR:-$(pwd)/backups}"
 mkdir -p "$backup_dir"
 final="$backup_dir/$timestamp"
 temporary="$backup_dir/.$timestamp.partial"
