@@ -55,7 +55,25 @@ export default function AuthGate() {
   const inviteToken = hash.startsWith('#invite=') ? hash.substring(8) : null
   const loginToken = hash.startsWith('#login=') ? hash.substring(7) : null
   useEffect(() => { api<Profile>('/api/auth/me').then(setProfile).catch(() => setProfile(null)).finally(() => setLoading(false)) }, [revision])
-  async function signOut() { await api('/api/auth/logout', {}); setAdminOpen(false); setProfile(null) }
+  async function signOut() {
+    // Révoquer uniquement l'abonnement push de cet appareil avant la fin de session.
+    try {
+      if ('serviceWorker' in navigator) {
+        const registration = await navigator.serviceWorker.getRegistration('/')
+        const subscription = await registration?.pushManager.getSubscription()
+        if (subscription) {
+          await fetch('/api/notifications/push-subscriptions', {
+            method:'DELETE',credentials:'same-origin',
+            headers:{'Content-Type':'application/json','X-Orga-Request':'1'},
+            body:JSON.stringify({endpoint:subscription.endpoint})
+          })
+          await subscription.unsubscribe()
+        }
+      }
+    } catch { /* la déconnexion ne doit pas être bloquée par le navigateur */ }
+    await api('/api/auth/logout', {})
+    setAdminOpen(false); setProfile(null)
+  }
   if (loading) return <main className="auth-background"><p>Chargement d'Orga Alfiya…</p></main>
   if (inviteToken) return <Activate token={inviteToken} onComplete={refresh}/>
   if (!profile) return <SignIn loginToken={loginToken} onComplete={refresh}/>
