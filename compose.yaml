@@ -29,11 +29,39 @@ services:
       SMTP_USERNAME: ${SMTP_USERNAME:-}
       SMTP_PASSWORD: ${SMTP_PASSWORD:-}
       SMTP_FROM: ${SMTP_FROM:-}
+      VAPID_PRIVATE_KEY_FILE: ${VAPID_PRIVATE_KEY_FILE:-/app/secrets/vapid_private.pem}
+      VAPID_CONTACT: ${VAPID_CONTACT:-}
     depends_on:
       db:
         condition: service_healthy
     volumes:
       - uploads:/app/uploads
+      - ./secrets:/app/secrets:ro
+    networks: [backend]
+    read_only: true
+    tmpfs: [/tmp]
+
+  notification-worker:
+    build: ./apps/api
+    command: ["python", "-m", "app.notification_worker_v7"]
+    restart: unless-stopped
+    environment:
+      DATABASE_URL: postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@db:5432/${POSTGRES_DB}
+      ORGA_PUBLIC_URL: ${ORGA_PUBLIC_URL:?ORGA_PUBLIC_URL requis}
+      SMTP_HOST: ${SMTP_HOST:-}
+      SMTP_PORT: ${SMTP_PORT:-465}
+      SMTP_USERNAME: ${SMTP_USERNAME:-}
+      SMTP_PASSWORD: ${SMTP_PASSWORD:-}
+      SMTP_FROM: ${SMTP_FROM:-}
+      VAPID_PRIVATE_KEY_FILE: ${VAPID_PRIVATE_KEY_FILE:-/app/secrets/vapid_private.pem}
+      VAPID_CONTACT: ${VAPID_CONTACT:-}
+    depends_on:
+      db:
+        condition: service_healthy
+      api:
+        condition: service_started
+    volumes:
+      - ./secrets:/app/secrets:ro
     networks: [backend]
     read_only: true
     tmpfs: [/tmp]
