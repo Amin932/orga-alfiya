@@ -161,6 +161,7 @@ def startup():
     schema_cards(db)
     schema_templates(db)
     schema_collaboration(db)
+    schema_notifications(db)
 
 
 @app.get('/api/health')
@@ -432,3 +433,7 @@ register_template_routes(app, db, current_user, admin, require_request)
 # Bloc 6 : commentaires, mentions, fichiers privés, couverture et activité.
 from .collaboration_v6 import schema_collaboration, register_collaboration_routes
 register_collaboration_routes(app, db, current_user, require_request)
+
+# Bloc 7 : notifications et préférences des membres.
+from .notifications_v7 import schema_notifications, register_notification_routes, notify
+register_notification_routes(app, db, current_user, require_request)
