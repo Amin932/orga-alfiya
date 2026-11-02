@@ -33,4 +33,37 @@ jobs:
       - name: Tester les permissions et validations
         env:
           PYTHONPATH: apps/api
-        run: pytest -q apps/api/tests
+        run: pytest -q apps/api/tests --ignore=apps/api/tests/test_integration_v8.py
+
+
+  integration-postgres:
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_DB: orgatest
+          POSTGRES_USER: orgatest
+          POSTGRES_PASSWORD: test-password-only-in-ci
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U orgatest -d orgatest"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 12
+    env:
+      PYTHONPATH: apps/api
+      DATABASE_URL: postgresql://orgatest:test-password-only-in-ci@127.0.0.1:5432/orgatest
+      SUPERADMIN_EMAIL: integration-admin@example.test
+      ORGA_PUBLIC_URL: https://orga-alfiya.amvei.synology.me
+      COOKIE_SECURE: "true"
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Installer les dépendances
+        run: pip install -r apps/api/requirements.txt pytest httpx
+      - name: Tester le démarrage réel avec PostgreSQL
+        run: pytest -q apps/api/tests/test_integration_v8.py
