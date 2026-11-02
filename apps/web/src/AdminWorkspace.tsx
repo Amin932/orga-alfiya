@@ -84,7 +84,7 @@ export default function AdminWorkspace({ back }: { back: () => void }) {
 
   const selected = members.find(u => u.id === selectedMember) ?? null
   const allPoles = projects.flatMap(project => project.poles.map(p => ({ ...p, project: project.name })))
-  const possiblePoles = allPoles.filter(p => access.includes(p.project_id))
+  const possiblePoles = selected?.role === 'superadmin' ? allPoles : allPoles.filter(p => access.includes(p.project_id))
   const orderedPoles = poles.map(id => possiblePoles.find(p => p.id === id)).filter((p): p is typeof possiblePoles[number] => Boolean(p))
   const editedProject = projects.find(p => p.id === editProjectId)
   const editedPole = allPoles.find(p => p.id === editPoleId)
@@ -141,7 +141,23 @@ export default function AdminWorkspace({ back }: { back: () => void }) {
       </div>
       <section className="aw-panel aw-member-editor">
         <h2>Fiche du membre</h2>
-        {!selected ? <p>Sélectionne un membre dans l'annuaire pour gérer ses projets et ses pôles.</p> : selected.role === 'superadmin' ? <p>Le compte super-administrateur est protégé. Il a automatiquement accès à tous les projets.</p> : <>
+        {!selected ? <p>Sélectionne un membre dans l'annuaire pour gérer ses projets et ses pôles.</p> : selected.role === 'superadmin' ? <>
+          <p>Ton compte a automatiquement accès à tous les projets. Tu peux choisir tes pôles et ta couleur d'identification ci-dessous.</p>
+          <div className="aw-section"><h3>Mes pôles</h3>
+            <p>Le premier pôle dans la liste détermine la couleur affichée avec ton nom.</p>
+            {orderedPoles.length > 0 && <ol className="aw-pole-members">{orderedPoles.map((pole,index) => <li key={pole.id}>
+              <span className="aw-color" style={{backgroundColor:pole.color}}/>
+              <span><strong>{pole.name}</strong><small>{pole.project}{index === 0 ? ' · Couleur principale' : ''}</small></span>
+              <button aria-label={'Monter '+pole.name} disabled={busy || index === 0} onClick={() => movePole(index,-1)}><ArrowUp size={15}/></button>
+              <button aria-label={'Descendre '+pole.name} disabled={busy || index === orderedPoles.length-1} onClick={() => movePole(index,1)}><ArrowDown size={15}/></button>
+              <button aria-label={'Retirer '+pole.name} disabled={busy} onClick={() => setPoles(old => old.filter(id => id !== pole.id))}><X size={16}/></button>
+            </li>)}</ol>}
+            <label>Ajouter un pôle<select value="" disabled={busy} onChange={e => {const id=Number(e.target.value);if(id && !poles.includes(id))setPoles(old=>[...old,id])}}>
+              <option value="">Choisir un pôle…</option>{possiblePoles.filter(p=>!poles.includes(p.id)).map(p=><option key={p.id} value={p.id}>{p.project} — {p.name}</option>)}
+            </select></label>
+            <button className="aw-secondary" disabled={busy} onClick={() => void perform(() => request(`/api/admin/users/${selected.id}/poles`, {pole_ids:poles}))}><Save size={15}/> Enregistrer mes pôles</button>
+          </div>
+        </> : <>
           <h3>{[selected.first_name,selected.last_name].filter(Boolean).join(' ') || selected.email}</h3>
           <p>{selected.email} · {selected.state === 'pending' ? 'En attente d’activation' : selected.state === 'disabled' ? 'Compte désactivé' : 'Compte actif'}</p>
           <div className="aw-section">
