@@ -6,6 +6,7 @@ from fastapi import Depends, HTTPException, Request
 from pydantic import BaseModel, Field, model_validator
 from .templates_v5 import instantiate_template
 from .collaboration_v6 import record_activity, purge_card_files, unlink_stored_files
+from .notifications_v7 import notify, subscribers
 
 Status = Literal["todo", "progress", "done"]
 Template = Literal["free", "speaker", "no_speaker"]
@@ -215,12 +216,20 @@ def register_card_routes(app, db, current_user, admin, require_request):
                 AND u.id=ANY(%s)""", (card["project_id"], ids)).fetchall() if ids else []
             if {x["id"] for x in permitted} != set(ids):
                 raise HTTPException(422, "Responsable sans accès à ce projet")
+            previous = {r["user_id"] for r in conn.execute(
+                "SELECT user_id FROM card_assignees WHERE card_id=%s",(card_id,)).fetchall()}
             conn.execute("DELETE FROM card_assignees WHERE card_id=%s", (card_id,))
             for member_id in ids:
                 conn.execute("INSERT INTO card_assignees(card_id,user_id) VALUES (%s,%s)",
                              (card_id,member_id))
             conn.execute("UPDATE cards SET updated_at=now() WHERE id=%s", (card_id,))
             record_activity(conn,card_id,user["id"],"assignees_changed",{"member_ids":ids})
+            for member_id in set(ids)-previous:
+                conn.execute("""INSERT INTO card_followers(card_id,user_id) VALUES(%s,%s)
+                    ON CONFLICT DO NOTHING""",(card_id,member_id))
+                notify(conn,member_id,"assignment","Nouvelle mission attribuée",
+                       f'Vous êtes responsable de « {card["title"]} ».',card_id,
+                       actor_id=user["id"])
             return as_dict(conn, card)
 
     @app.post("/api/cards/{card_id}/move")
@@ -259,6 +268,11 @@ def register_card_routes(app, db, current_user, admin, require_request):
                         WHERE id=%s""", (status,pos,card_id,current_id))
             record_activity(conn,card_id,user["id"],"card_moved",
                             {"from":card["status"],"to":body.status})
+            if body.status=="done" and card["status"]!="done":
+                for member_id in subscribers(conn,card_id):
+                    notify(conn,member_id,"completed","Mission terminée",
+                           f'« {card["title"]} » a été marquée terminée.',
+                           card_id,actor_id=user["id"])
             return {"status": "updated"}
 
     @app.post("/api/cards/{card_id}/trash")
