@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useState, type FormEvent } from 'react'
 import { ArrowDown, ArrowLeft, ArrowUp, Check, FolderKanban, Mail, Plus, Save, ShieldCheck, Trash2, Users, X } from 'lucide-react'
 import './admin-workspace.css'
+import AdminTrash from './AdminTrash'
 
 type Pole = { id: number; project_id: number; name: string; color: string; description: string }
 type Project = { id: number; name: string; description: string; poles: Pole[] }
@@ -19,7 +20,7 @@ async function request<T>(path: string, body?: unknown): Promise<T> {
 export default function AdminWorkspace({ back }: { back: () => void }) {
   const [projects, setProjects] = useState<Project[]>([])
   const [members, setMembers] = useState<Member[]>([])
-  const [tab, setTab] = useState<'members' | 'projects'>('members')
+  const [tab, setTab] = useState<'members' | 'projects' | 'trash'>('members')
   const [selectedMember, setSelectedMember] = useState<number | null>(null)
   const [access, setAccess] = useState<number[]>([])
   const [poles, setPoles] = useState<number[]>([])
@@ -118,6 +119,7 @@ export default function AdminWorkspace({ back }: { back: () => void }) {
     <div className="aw-tabs" role="tablist" aria-label="Navigation administration">
       <button role="tab" aria-selected={tab === 'members'} className={tab === 'members' ? 'selected' : ''} onClick={() => setTab('members')}>Membres et accès</button>
       <button role="tab" aria-selected={tab === 'projects'} className={tab === 'projects' ? 'selected' : ''} onClick={() => setTab('projects')}>Projets et pôles</button>
+      <button role="tab" aria-selected={tab === 'trash'} className={tab === 'trash' ? 'selected' : ''} onClick={() => setTab('trash')}>Corbeille</button>
     </div>
 
     {tab === 'members' ? <div className="aw-columns">
@@ -198,7 +200,7 @@ export default function AdminWorkspace({ back }: { back: () => void }) {
           </div>
         </>}
       </section>
-    </div> : <div className="aw-columns">
+    </div>  : tab === 'projects' ? <div className="aw-columns">
       <div className="aw-stack">
         <section className="aw-panel"><h2>Nouveau projet</h2><form onSubmit={e => {e.preventDefault();void perform(async () => {await request('/api/admin/projects',{name:newProject});setNewProject('')})}}>
           <label>Nom du projet<input value={newProject} onChange={e => setNewProject(e.target.value)} minLength={2} maxLength={120} required placeholder="Ex. Ramadan 2027"/></label>
@@ -234,6 +236,6 @@ export default function AdminWorkspace({ back }: { back: () => void }) {
           </form>}
         </section>
       </div>
-    </div>}
+    </div> : <AdminTrash/>}
   </main>
 }
