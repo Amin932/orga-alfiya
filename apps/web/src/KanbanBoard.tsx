@@ -10,6 +10,7 @@ import { CalendarDays, Check, ChevronDown, GripVertical, Plus, Search, Trash2, U
 import './kanban.css'
 import { CardTemplateContent, listTemplates, type Template as LibraryTemplate } from './TemplatesV5'
 import CollaborationV6 from './CollaborationV6'
+import { FollowCardV7 } from './NotificationsV7'
 
 type Status = 'todo' | 'progress' | 'done'
 type Template = 'free' | 'speaker' | 'no_speaker'
@@ -121,7 +122,19 @@ export default function KanbanBoard({ poleId, projectId, viewer }: Props) {
     let active = true
     setLoading(true); setError(''); setOpened(null); setFilters({ todo: emptyFilter(), progress: emptyFilter(), done: emptyFilter() })
     Promise.all([api<{ cards: Card[] }>('/api/poles/' + poleId + '/cards'), api<{ members: Member[] }>('/api/projects/' + projectId + '/card-members')])
-      .then(([result, people]) => { if (active) { setCards(result.cards); setMembers(people.members) } })
+      .then(([result, people]) => { if (active) {
+          setCards(result.cards);setMembers(people.members)
+          const query=new URLSearchParams(window.location.search)
+          if(query.get('pole')===poleId && query.has('card')){
+            const card=result.cards.find(c=>c.id===Number(query.get('card')))
+            if(card){
+              setOpened(card)
+              setDraft({title:card.title,description:card.description||'',
+                start_date:card.start_date||'',due_date:card.due_date||''})
+            }
+            window.history.replaceState({},'',window.location.pathname)
+          }
+        } })
       .catch(e => { if (active) setError(e instanceof Error ? e.message : 'Erreur de chargement') })
       .finally(() => { if (active) setLoading(false) })
     return () => { active = false }
@@ -265,6 +278,7 @@ export default function KanbanBoard({ poleId, projectId, viewer }: Props) {
           <button className="primary-button" disabled={busy || !draft.title.trim()}><Check size={16}/> Enregistrer</button>
         </form>
         <CardTemplateContent cardId={opened.id}/>
+        <FollowCardV7 cardId={opened.id}/>
         <CollaborationV6 cardId={opened.id} projectId={Number(projectId)} viewer={viewer} onChanged={async () => { const latest=await load(); setOpened(previous => previous ? latest.find(c=>c.id===previous.id) ?? previous : null) }}/>
         <div className="kb-assign"><h3><Users size={17}/> Responsables</h3><div className="kb-member-list">{members.map(m =>
           <label key={m.id}><input type="checkbox" disabled={busy} checked={opened.assignees.some(a => a.id === m.id)} onChange={e => void assign(m.id,e.target.checked)}/><span className="kb-person-tag" style={{ borderColor: m.color || '#c4b2a5' }}>{fullName(m)}</span></label>)}
