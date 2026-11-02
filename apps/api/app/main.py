@@ -159,6 +159,7 @@ def startup():
         raise RuntimeError('COOKIE_SECURE=false autorisé uniquement avec ALLOW_INSECURE_LOCAL=yes')
     schema()
     schema_cards(db)
+    schema_templates(db)
 
 
 @app.get('/api/health')
@@ -422,3 +423,7 @@ register_admin_routes(app, db, require_request, admin)
 # Bloc 4 : tableau Kanban, cartes et contrôles d'accès.
 from .kanban import register_card_routes, schema_cards
 register_card_routes(app, db, current_user, admin, require_request)
+
+# Bloc 5 : modèles officiels et personnalisés, champs et checklists.
+from .templates_v5 import schema_templates, register_template_routes
+register_template_routes(app, db, current_user, admin, require_request)
