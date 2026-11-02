@@ -57,8 +57,9 @@ function CardFace({ card, onClick, dragging = false }: { card: Card; onClick?: (
 
 function SortableCard({ card, onOpen }: { card: Card; onOpen: (card: Card) => void }) {
   const { setNodeRef, attributes, listeners, transform, transition, isDragging } = useSortable({ id: 'card-' + card.id })
-  return <div ref={setNodeRef} className={'kb-sortable' + (isDragging ? ' kb-ghost' : '')} style={{ transform: CSS.Transform.toString(transform), transition }}>
-    <div className="kb-grab" {...attributes} {...listeners} title="Glisser pour déplacer (appui prolongé sur mobile)"><GripVertical size={18}/></div>
+  return <div ref={setNodeRef} className={'kb-sortable' + (isDragging ? ' kb-ghost' : '')} style={{ transform: CSS.Transform.toString(transform), transition }}
+    {...attributes} {...listeners} title="Glisser la carte pour la déplacer (appui prolongé sur mobile)">
+    <div className="kb-grab" aria-hidden="true"><GripVertical size={18}/></div>
     <CardFace card={card} onClick={() => onOpen(card)} />
   </div>
 }
