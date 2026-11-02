@@ -14,6 +14,12 @@ class CardCreate(BaseModel):
     status: Status = "todo"
     template_key: Template = "free"
 
+    @model_validator(mode="after")
+    def title_required(self):
+        if not self.title.strip():
+            raise ValueError("Le titre est obligatoire")
+        return self
+
 
 class CardEdit(BaseModel):
     title: str | None = Field(default=None, max_length=180)
