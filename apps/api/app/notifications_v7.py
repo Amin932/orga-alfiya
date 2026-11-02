@@ -31,6 +31,15 @@ class PushSubscriptionInput(BaseModel):
 class FollowInput(BaseModel):
     follow: bool
 
+class ReminderInput(BaseModel):
+    days_before: list[int] = Field(default_factory=lambda:[3,1,0],max_length=4)
+    overdue_next_day: bool = True
+
+    def valid_days(self):
+        if len(set(self.days_before))!=len(self.days_before) or not set(self.days_before).issubset({0,1,3,7}):
+            raise HTTPException(422,"Jours de rappel invalides")
+
+
 
 def schema_notifications(db):
     with db() as conn:
@@ -65,6 +74,11 @@ def schema_notifications(db):
                 sent_at TIMESTAMPTZ,
                 last_error TEXT,
                 UNIQUE(notification_id,channel)
+            )""",
+            """CREATE TABLE IF NOT EXISTS card_reminder_settings (
+                card_id BIGINT PRIMARY KEY REFERENCES cards(id) ON DELETE CASCADE,
+                days_before JSONB NOT NULL DEFAULT '[3,1,0]'::jsonb,
+                overdue_next_day BOOLEAN NOT NULL DEFAULT true
             )""",
             """CREATE TABLE IF NOT EXISTS card_followers (
                 card_id BIGINT NOT NULL REFERENCES cards(id) ON DELETE CASCADE,
@@ -256,6 +270,28 @@ def register_notification_routes(app, db, current_user, require_request):
             else: conn.execute("DELETE FROM card_followers WHERE card_id=%s AND user_id=%s",
                               (card_id,user["id"]))
         return {"followed":body.follow}
+
+
+    @app.get("/api/cards/{card_id}/reminders")
+    def get_reminders(card_id:int,user=Depends(current_user)):
+        with db() as conn:
+            get_card_authorized(conn,card_id,user)
+            settings=conn.execute("""SELECT days_before,overdue_next_day
+                FROM card_reminder_settings WHERE card_id=%s""",(card_id,)).fetchone()
+        return settings or {"days_before":[3,1,0],"overdue_next_day":True}
+
+    @app.put("/api/cards/{card_id}/reminders")
+    def save_reminders(card_id:int,body:ReminderInput,request:Request,user=Depends(current_user)):
+        require_request(request);body.valid_days()
+        from psycopg.types.json import Jsonb
+        with db() as conn:
+            get_card_authorized(conn,card_id,user)
+            conn.execute("""INSERT INTO card_reminder_settings(card_id,days_before,overdue_next_day)
+                VALUES(%s,%s,%s)
+                ON CONFLICT(card_id) DO UPDATE SET days_before=EXCLUDED.days_before,
+                    overdue_next_day=EXCLUDED.overdue_next_day""",
+                (card_id,Jsonb(body.days_before),body.overdue_next_day))
+        return {"days_before":body.days_before,"overdue_next_day":body.overdue_next_day}
 
     @app.get("/api/notifications/push-public-key")
     def push_public(user=Depends(current_user)):
