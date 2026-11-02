@@ -57,3 +57,8 @@
 .kb-trash{display:flex;align-items:center;gap:6px;border:1px solid #ebc4c1;background:#fff4f3;border-radius:8px;padding:8px;color:#a7403d;font-size:11px;cursor:pointer}
 @media(max-width:1050px){.kb-grid{display:flex;overflow-x:auto;align-items:flex-start;gap:12px;padding-bottom:15px}.kb-column{min-width:265px;width:265px;flex-shrink:0}}
 @media(max-width:650px){.kb-grid{margin:0 -16px;padding:0 16px 14px;scroll-snap-type:x proximity}.kb-column{min-width:calc(100vw - 65px);width:calc(100vw - 65px);scroll-snap-align:start}.kb-modal{max-height:94vh}.kb-detail-foot{align-items:flex-start;flex-direction:column}}
+
+/* Drag depuis toute la carte : clic bref = ouvrir, appui prolongé = déplacer. */
+.kb-sortable{cursor:grab;touch-action:manipulation}
+.kb-sortable:active{cursor:grabbing}
+.kb-grab{pointer-events:none;touch-action:inherit}
