@@ -1,5 +1,5 @@
-import { useCallback, useEffect, useState, type FormEvent } from 'react'
-import { AtSign, Clock3, FileImage, FileText, ImagePlus, MessageCircle, Paperclip, Save, Trash2, Upload, X } from 'lucide-react'
+import { useCallback, useEffect, useState, type FormEvent, type ReactNode } from 'react'
+import { AtSign, Clock3, FileText, ImagePlus, MessageCircle, Paperclip, Save, Trash2, Upload, X } from 'lucide-react'
 import './collaboration.css'
 
 type Author = { first_name: string; last_name: string; color: string | null }
@@ -30,7 +30,7 @@ function when(value: string) {
 }
 function renderMentions(text: string) {
   const regex = /@\[(.{1,100}?)\]\((user|pole):\d+\)/g
-  const parts: (string | React.ReactNode)[] = []
+  const parts: (string | ReactNode)[] = []
   let last = 0; let match: RegExpExecArray | null
   while ((match = regex.exec(text)) !== null) {
     if (match.index > last) parts.push(text.slice(last, match.index))
