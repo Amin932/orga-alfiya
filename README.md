@@ -1,8 +1,8 @@
-# Orga Alfiya — blocs 1 à 6
+# Orga Alfiya — blocs 1 à 7
 
 Application d'organisation du BDE Alfiya, hébergée sur NAS Synology, accessible à terme sur `https://orga-alfiya.amvei.synology.me/`.
 
-## Fonctionnalités disponibles (blocs 1 à 6)
+## Fonctionnalités disponibles (blocs 1 à 7)
 
 - Invitation **uniquement par le super-administrateur** ; lien individuel à usage unique valable 7 jours.
 - Le membre renseigne son nom, son prénom et choisit son premier pôle parmi ceux des projets autorisés.
@@ -56,6 +56,48 @@ Application d'organisation du BDE Alfiya, hébergée sur NAS Synology, accessibl
 
 **À noter :** l'affichage des commentaires et documents ne nécessite aucun service externe. Les notifications automatiques et les envois de courriels pour les mentions ne sont pas encore actifs. Des tests d'intégration PostgreSQL/Docker et une vérification de sécurité restent nécessaires avant une ouverture publique. Les fichiers téléchargés ne sont pas analysés par antivirus dans cette version : ne partagez que des documents de sources fiables et prévoyez une analyse antivirus avant le déploiement en production.
 
+
+### Bloc 7 — Notifications et échéances
+
+- Centre de notifications dans le site, compteur non lu et lien direct vers les cartes.
+- Alertes sur : attribution de carte, mention de membre ou de pôle, commentaires pour abonnés, passage à Terminé, nouveaux accès à un projet.
+- Rappels activés par défaut J-3, J-1, J0, puis une fois à J+1 en cas de retard. Aucun rappel pour les cartes terminées, sans échéance ou supprimées.
+- Cases de configuration propres à chaque carte pour J-7/J-3/J-1/J0/J+1 ; calcul après 9 heures (Europe/Paris).
+- Préférences personnelles par catégorie et par canal e-mail/push.
+- Notifications via SMTP et push VAPID avec un conteneur dédié "notification-worker", reprise sur échec et dédoublonnage.
+- PWA avec service worker push ; aucun cache local des documents confidentiels.
+
+#### Mise en place des notifications push
+
+Sur le NAS, dans /volume1/docker/orga-alfiya :
+
+```bash
+mkdir -p secrets
+openssl ecparam -name prime256v1 -genkey -noout -out secrets/vapid_private.pem
+chmod 600 secrets/vapid_private.pem
+```
+
+La clé ne doit jamais être ajoutée à GitHub. Le conteneur utilise l'UID 10001 ; ajuster les droits de lecture du fichier en toute sécurité si nécessaire. Compléter le .env local avec :
+
+```dotenv
+VAPID_PRIVATE_KEY_FILE=/app/secrets/vapid_private.pem
+VAPID_CONTACT=mailto:une-adresse-valide@exemple.fr
+```
+
+Puis, toujours sur le NAS :
+
+```bash
+git pull
+docker compose config
+docker compose up -d --build
+docker compose ps
+docker compose logs --tail=100 notification-worker
+```
+
+Pour les push, l'utilisateur doit autoriser les notifications ; un navigateur compatible et une origine HTTPS sont requis. Sur iPhone, installer la PWA sur l'écran d'accueil. Les e-mails exigent une configuration SMTP valide. Sans clé VAPID, le centre de notifications peut fonctionner, mais pas le push.
+
+**Sécurité :** ne pas exposer ce service aux membres avant tests réels de PostgreSQL, du SMTP, des push et des sauvegardes.
+
 ## Configuration sur Synology
 
 1. Cloner `https://github.com/Amin932/orga-alfiya.git` dans `/volume1/docker/orga-alfiya`.
@@ -76,5 +118,5 @@ Le domaine visé peut nécessiter une configuration réseau complémentaire selo
 
 - Historique et commentaires enrichis, amélioration de l'ergonomie et tests d'intégration réels.
 - Prévoir une analyse antivirus des pièces jointes avant l'ouverture aux membres.
-- Notifications internes, SMTP et push, rappels d'échéance.
+- Tests complets sur le NAS : Docker, PostgreSQL, SMTP, push et sauvegardes.
 - Tests d'intégration et revue de sécurité avant ouverture aux 25 membres.
