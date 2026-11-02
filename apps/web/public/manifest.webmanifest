@@ -1,0 +1,17 @@
+{
+  "name": "Orga Alfiya — BDE",
+  "short_name": "Orga Alfiya",
+  "description": "Organisation des projets et événements du BDE Alfiya",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#faf7f2",
+  "theme_color": "#b57460",
+  "icons": [
+    {
+      "src": "/logo-bde.png",
+      "sizes": "any",
+      "type": "image/png",
+      "purpose": "any"
+    }
+  ]
+}
