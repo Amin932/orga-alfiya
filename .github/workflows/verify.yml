@@ -1,0 +1,36 @@
+name: Vérification Orga Alfiya
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  frontend:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Installer les dépendances
+        working-directory: apps/web
+        run: npm install --no-audit --no-fund
+      - name: Vérifier TypeScript et construire le site
+        working-directory: apps/web
+        run: npm run build
+
+  api:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Installer les dépendances
+        run: pip install -r apps/api/requirements.txt pytest httpx
+      - name: Vérifier la syntaxe Python
+        run: python -m compileall -q apps/api/app
+      - name: Tester les permissions et validations
+        env:
+          PYTHONPATH: apps/api
+        run: pytest -q apps/api/tests
