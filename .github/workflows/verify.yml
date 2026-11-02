@@ -95,6 +95,13 @@ jobs:
         run: |
           curl --fail --silent --show-error http://127.0.0.1:8092/api/health/database
           curl --fail --silent --show-error http://127.0.0.1:8092/ >/dev/null
+      - name: Tester la sauvegarde complète et le redémarrage
+        run: |
+          sh scripts/backup_nas.sh
+          test -n "$(find backups -name database.dump -type f -print -quit)"
+          test -n "$(find backups -name uploads.tar.gz -type f -print -quit)"
+          docker compose up -d --wait --wait-timeout 120
+          curl --fail --silent --show-error http://127.0.0.1:8092/api/health/database
       - name: Journaux en cas d'erreur
         if: failure()
         run: docker compose ps && docker compose logs --tail=100
