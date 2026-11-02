@@ -1,0 +1,28 @@
+.nt-shell{position:relative}
+.nt-trigger{position:relative}
+.nt-count{position:absolute;top:-5px;right:-6px;display:grid;place-items:center;min-width:17px;height:17px;padding:0 3px;border-radius:10px;background:#b35c45;color:white;font-size:10px;font-weight:700;border:2px solid #fff}
+.nt-panel{position:absolute;right:-45px;top:44px;width:min(370px,calc(100vw - 26px));max-height:min(80vh,680px);background:#fff;border:1px solid #e9dfd5;border-radius:15px;z-index:70;box-shadow:0 18px 45px #48342728;display:flex;flex-direction:column;color:#54473f;overflow:hidden}
+.nt-heading,.nt-tools{display:flex;align-items:center;justify-content:space-between;padding:15px;gap:8px}
+.nt-heading{border-bottom:1px solid #eee7de;font-size:15px}
+.nt-plain{border:0;background:none;color:#7c6b5e;display:grid;place-items:center;cursor:pointer}
+.nt-tools{padding:8px 12px;border-bottom:1px solid #eee7de}
+.nt-tools button,.nt-setting-actions button{display:flex;align-items:center;justify-content:center;gap:6px;background:#fbf6f1;border:1px solid #e9d9ce;padding:8px;border-radius:7px;font-size:11px;color:#996249;cursor:pointer}
+.nt-tools button:hover,.nt-setting-actions button:hover{background:#f5e9de}
+.nt-list{overflow-y:auto}
+.nt-item{display:grid;text-align:left;gap:6px;border:0;border-bottom:1px solid #f1ebe6;background:#fff;padding:13px 16px;width:100%;cursor:pointer;color:inherit}
+.nt-item:hover,.nt-item.unread{background:#fdf8f3}
+.nt-item.unread{border-left:3px solid #b57460}
+.nt-item strong{font-size:12px}
+.nt-item span{font-size:11px;line-height:1.5;color:#7b6d63}
+.nt-item small{color:#a1958a;font-size:10px}
+.nt-message{padding:10px 14px;background:#f5e9dd;color:#7e533c;font-size:12px;margin:0}
+.nt-empty{padding:28px 15px;text-align:center;font-size:13px;color:#978577}
+.nt-preferences{display:grid;gap:11px;padding:16px;overflow:auto}
+.nt-preferences label{display:flex;align-items:center;gap:9px;font-size:12px}
+.nt-preferences input{accent-color:#b57460}
+.nt-preferences h4{margin:10px 0 3px;font-size:13px}
+.nt-preferences>small{font-size:11px;line-height:1.5;color:#9a887a}
+.nt-setting-actions{display:grid;gap:8px;margin-top:12px}
+.nt-setting-actions button:disabled{opacity:.5}
+.nt-follow{display:flex;align-items:center;gap:7px;padding:9px 11px;border:1px solid #e4d5c6;border-radius:9px;background:#faf5ee;color:#9a614a;cursor:pointer;font-size:12px}
+@media(max-width:680px){.nt-panel{position:fixed;top:67px;left:10px;right:10px;width:auto;max-height:calc(100dvh - 85px)}}
