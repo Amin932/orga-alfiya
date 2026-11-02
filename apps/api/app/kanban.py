@@ -4,6 +4,7 @@ from typing import Literal
 
 from fastapi import Depends, HTTPException, Request
 from pydantic import BaseModel, Field, model_validator
+from .templates_v5 import instantiate_template
 
 Status = Literal["todo", "progress", "done"]
 Template = Literal["free", "speaker", "no_speaker"]
@@ -13,6 +14,7 @@ class CardCreate(BaseModel):
     title: str = Field(min_length=1, max_length=180)
     status: Status = "todo"
     template_key: Template = "free"
+    template_id: int | None = Field(default=None, gt=0)
 
     @model_validator(mode="after")
     def title_required(self):
@@ -115,7 +117,7 @@ def register_card_routes(app, db, current_user, admin, require_request):
     def list_cards(pole_id: int, user=Depends(current_user)):
         with db() as conn:
             pole_access(conn, pole_id, user)
-            cards = conn.execute("""SELECT c.id,c.pole_id,c.title,c.description,c.template_key,
+            cards = conn.execute("""SELECT c.id,c.pole_id,c.title,c.description,c.template_key,c.template_id,
                 c.status,c.position,c.start_date,c.due_date,c.created_at,c.updated_at,
                 c.created_by,u.first_name AS author_first_name,u.last_name AS author_last_name
                 FROM cards c JOIN users u ON u.id=c.created_by
@@ -140,6 +142,18 @@ def register_card_routes(app, db, current_user, admin, require_request):
                 (pole_id,created_by,title,status,template_key,position)
                 VALUES (%s,%s,%s,%s,%s,%s) RETURNING *""",
                 (pole_id,user["id"],title,body.status,body.template_key,position)).fetchone()
+            template = None
+            if body.template_id is not None:
+                template = conn.execute("SELECT * FROM templates WHERE id=%s",
+                                        (body.template_id,)).fetchone()
+                if not template:
+                    raise HTTPException(422, "Modèle introuvable")
+            elif body.template_key in ("speaker", "no_speaker"):
+                template = conn.execute("SELECT * FROM templates WHERE slug=%s",
+                                        (body.template_key,)).fetchone()
+            if template:
+                instantiate_template(conn, card["id"], template)
+                card["template_id"] = template["id"]
             return as_dict(conn, card)
 
     @app.patch("/api/cards/{card_id}")
