@@ -83,8 +83,11 @@ export default function NotificationsV7() {
       const registration=await navigator.serviceWorker.register('/sw.js')
       const ready=await navigator.serviceWorker.ready
       const current=await ready.pushManager.getSubscription()
+      const bytes=decodePublicKey(pushKey)
+      const keyBuffer=new ArrayBuffer(bytes.length)
+      new Uint8Array(keyBuffer).set(bytes)
       const subscription=current || await ready.pushManager.subscribe({userVisibleOnly:true,
-        applicationServerKey:decodePublicKey(pushKey)})
+        applicationServerKey:keyBuffer})
       const serialized=subscription.toJSON()
       if(!serialized.endpoint || !serialized.keys?.p256dh || !serialized.keys.auth)
         throw new Error('Abonnement push incomplet.')
