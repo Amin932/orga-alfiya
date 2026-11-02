@@ -9,6 +9,7 @@ from fastapi import Depends, File, HTTPException, Request, UploadFile
 from fastapi.responses import FileResponse
 from pydantic import BaseModel, Field, model_validator
 from psycopg.types.json import Jsonb
+from .notifications_v7 import notify, subscribers
 
 UPLOAD_DIR = Path(os.environ.get("ORGA_UPLOAD_DIR", "/app/uploads"))
 MAX_FILE_BYTES = 15 * 1024 * 1024
@@ -205,6 +206,26 @@ def register_collaboration_routes(app, db, current_user, require_request):
                 conn.execute("""INSERT INTO comment_mentions(comment_id,target_type,target_id)
                     VALUES (%s,%s,%s)""",(cm["id"],kind,target))
             record_activity(conn,card_id,user["id"],"comment_created",{"comment_id":cm["id"]})
+            card = conn.execute("SELECT title,pole_id FROM cards WHERE id=%s",(card_id,)).fetchone()
+            project_id=conn.execute("SELECT project_id FROM poles WHERE id=%s",(card["pole_id"],)).fetchone()["project_id"]
+            mentioned=set()
+            for kind,target in mentions:
+                if kind=="user":
+                    mentioned.add(target)
+                else:
+                    rows=conn.execute("""SELECT DISTINCT u.id FROM user_poles up
+                        JOIN users u ON u.id=up.user_id
+                        JOIN project_access a ON a.user_id=u.id AND a.project_id=%s
+                        WHERE up.pole_id=%s AND u.active=true""",(project_id,target)).fetchall()
+                    mentioned.update(r["id"] for r in rows)
+            for member_id in mentioned:
+                notify(conn,member_id,"mention","Vous avez été mentionné(e)",
+                       f'Un membre vous a mentionné dans « {card["title"]} ».',card_id,
+                       dedupe_key=f"mention:{cm['id']}:{member_id}",actor_id=user["id"])
+            for member_id in set(subscribers(conn,card_id))-mentioned:
+                notify(conn,member_id,"comment","Nouveau commentaire",
+                       f'Nouveau commentaire dans « {card["title"]} ».',card_id,
+                       dedupe_key=f"comment:{cm['id']}:{member_id}",actor_id=user["id"])
         return {"id":cm["id"],"status":"created"}
 
     @app.patch("/api/cards/{card_id}/comments/{comment_id}")
