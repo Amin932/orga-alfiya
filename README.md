@@ -1,14 +1,17 @@
-# Orga Alfiya — blocs 1 et 2
+# Orga Alfiya — blocs 1 à 3
 
 Application d'organisation du BDE Alfiya, hébergée sur NAS Synology, accessible à terme sur `https://orga-alfiya.amvei.synology.me/`.
 
-## Ce qui fonctionne dans le bloc 2
+## Fondations disponibles (blocs 1 à 3)
 
 - Invitation **uniquement par le super-administrateur** ; lien individuel à usage unique valable 7 jours.
 - Le membre renseigne son nom, son prénom et choisit son premier pôle parmi ceux des projets autorisés.
 - Connexion par lien e-mail valable 20 minutes ; session enregistrée 90 jours sur l'appareil.
 - Déconnexion et révocation immédiate des sessions lors de la désactivation du compte.
-- Gestion initiale des projets, pôles et invitations dans le panneau d'administration.
+- Administration des projets (création, renommage, description et suppression contrôlée), des pôles (création, couleur, édition et suppression contrôlée) et des invitations.
+- Fiche membre : accès à plusieurs projets, appartenances à plusieurs pôles, ordre réglable ; **le premier pôle définit la couleur permanente du membre** dans l'interface.
+- Annuaire des membres avec état actif / invitation en attente / désactivé ; réactivation d'un compte déjà activé.
+- Un accès à un projet couvre tous ses pôles ; les affectations aux pôles ne donnent **aucun** accès supplémentaire.
 - Accès aux projets filtré **côté API**, sans droit sur les projets non autorisés.
 - PostgreSQL (comptes, invitations, sessions et affectations). Secrets de session stockés **hachés**.
 
@@ -26,9 +29,12 @@ Les cartes Kanban et leurs données ne sont **pas encore actives** : elles seron
 
 Le domaine visé peut nécessiter une configuration réseau complémentaire selon la connexion Internet du NAS. Ne pas ouvrir le port PostgreSQL sur Internet. Sauvegarder régulièrement le volume `pgdata` et les documents.
 
+## Vérifications automatiques
+
+À chaque commit, GitHub Actions est configuré pour effectuer un build TypeScript/React et des tests unitaires de protections de l'API (`.github/workflows/verify.yml`). Un lancement complet avec PostgreSQL et un service SMTP réel reste indispensable avant ouverture publique.
+
 ## À compléter aux prochains blocs
 
-- Gestion visuelle avancée des membres et de leurs affectations multiples (ordre des pôles, couleur du premier), suppression / modification des pôles.
 - Cartes, glisser-déposer sur ordinateur et mobile, filtres, gestion des modèles.
 - Checklists, commentaires, fichiers, historique et corbeille.
 - Notifications internes, SMTP et push, rappels d'échéance.
