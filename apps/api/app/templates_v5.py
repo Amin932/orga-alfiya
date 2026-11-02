@@ -6,6 +6,7 @@ from typing import Literal
 from fastapi import Depends, HTTPException, Request
 from pydantic import BaseModel, Field, model_validator
 from psycopg.types.json import Jsonb
+from .collaboration_v6 import record_activity
 
 
 class FormField(BaseModel):
@@ -327,6 +328,7 @@ def register_template_routes(app, db, current_user, admin, require_request):
                 values[key] = value or ""
             conn.execute("UPDATE cards SET template_values=%s,updated_at=now() WHERE id=%s",
                          (Jsonb(values),card_id))
+            record_activity(conn,card_id,user["id"],"template_updated",{"fields":sorted(body.values.keys())})
             return {"values": values}
 
     @app.post("/api/cards/{card_id}/checklists", status_code=201)
@@ -337,9 +339,11 @@ def register_template_routes(app, db, current_user, admin, require_request):
             get_card(conn,card_id,user)
             position = conn.execute("""SELECT COALESCE(MAX(position),-1)+1 AS n
                 FROM card_checklists WHERE card_id=%s""",(card_id,)).fetchone()["n"]
-            return conn.execute("""INSERT INTO card_checklists(card_id,title,position)
+            row=conn.execute("""INSERT INTO card_checklists(card_id,title,position)
                 VALUES (%s,%s,%s) RETURNING id,title,position""",
                 (card_id,body.title.strip(),position)).fetchone()
+            record_activity(conn,card_id,user["id"],"checklist_created",{"list_id":row["id"]})
+            return row
 
     @app.post("/api/cards/{card_id}/checklists/{list_id}/items", status_code=201)
     def new_item(card_id: int, list_id: int, body: ItemText, request: Request,
@@ -349,9 +353,11 @@ def register_template_routes(app, db, current_user, admin, require_request):
             get_list(conn,card_id,list_id,user)
             position = conn.execute("""SELECT COALESCE(MAX(position),-1)+1 AS n
                 FROM card_checklist_items WHERE checklist_id=%s""",(list_id,)).fetchone()["n"]
-            return conn.execute("""INSERT INTO card_checklist_items(checklist_id,text,position)
+            row=conn.execute("""INSERT INTO card_checklist_items(checklist_id,text,position)
                 VALUES (%s,%s,%s) RETURNING id,text,position,done""",
                 (list_id,body.text.strip(),position)).fetchone()
+            record_activity(conn,card_id,user["id"],"checklist_item_added",{"item_id":row["id"]})
+            return row
 
     @app.patch("/api/cards/{card_id}/checklists/{list_id}")
     def rename_list(card_id: int, list_id: int, body: ChecklistName, request: Request,
@@ -369,6 +375,7 @@ def register_template_routes(app, db, current_user, admin, require_request):
         with db() as conn:
             get_list(conn,card_id,list_id,user)
             conn.execute("DELETE FROM card_checklists WHERE id=%s", (list_id,))
+            record_activity(conn,card_id,user["id"],"checklist_deleted",{"list_id":list_id})
         return {"status":"deleted"}
 
     @app.patch("/api/cards/{card_id}/checklists/{list_id}/items/{item_id}")
@@ -382,6 +389,7 @@ def register_template_routes(app, db, current_user, admin, require_request):
                 (body.text.strip(),item_id,list_id)).fetchone()
             if not row:
                 raise HTTPException(404, "Tâche introuvable")
+            record_activity(conn,card_id,user["id"],"checklist_item_updated",{"item_id":item_id})
         return {"status":"updated"}
 
     @app.patch("/api/cards/{card_id}/checklists/{list_id}/items/{item_id}/done")
@@ -396,6 +404,7 @@ def register_template_routes(app, db, current_user, admin, require_request):
                 (body.done,user["id"] if body.done else None,body.done,item_id,list_id)).fetchone()
             if not row:
                 raise HTTPException(404, "Tâche introuvable")
+            record_activity(conn,card_id,user["id"],"checklist_checked",{"item_id":item_id,"done":body.done})
             return row
 
     @app.delete("/api/cards/{card_id}/checklists/{list_id}/items/{item_id}")
@@ -408,4 +417,5 @@ def register_template_routes(app, db, current_user, admin, require_request):
                 WHERE id=%s AND checklist_id=%s RETURNING id""",(item_id,list_id)).fetchone()
             if not deleted:
                 raise HTTPException(404, "Tâche introuvable")
+            record_activity(conn,card_id,user["id"],"checklist_item_deleted",{"item_id":item_id})
         return {"status":"deleted"}
