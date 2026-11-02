@@ -1,55 +1,35 @@
-# Orga Alfiya
+# Orga Alfiya — blocs 1 et 2
 
-Application de gestion des projets, pôles, événements et missions du BDE de l'Institut Alfiya.
+Application d'organisation du BDE Alfiya, hébergée sur NAS Synology, accessible à terme sur `https://orga-alfiya.amvei.synology.me/`.
 
-> **Bloc 1 – socle technique.** L'interface présente uniquement des données **de démonstration**, sans sauvegarde des cartes ni authentification. Ne pas l'utiliser comme outil collaboratif en production avant la mise en place des invitations, autorisations et routes métier sécurisées.
+## Ce qui fonctionne dans le bloc 2
 
-## Architecture
+- Invitation **uniquement par le super-administrateur** ; lien individuel à usage unique valable 7 jours.
+- Le membre renseigne son nom, son prénom et choisit son premier pôle parmi ceux des projets autorisés.
+- Connexion par lien e-mail valable 20 minutes ; session enregistrée 90 jours sur l'appareil.
+- Déconnexion et révocation immédiate des sessions lors de la désactivation du compte.
+- Gestion initiale des projets, pôles et invitations dans le panneau d'administration.
+- Accès aux projets filtré **côté API**, sans droit sur les projets non autorisés.
+- PostgreSQL (comptes, invitations, sessions et affectations). Secrets de session stockés **hachés**.
 
-- `apps/web` : React + TypeScript + Vite, compilé puis servi par Nginx.
-- `apps/api` : FastAPI, endpoints de vérification technique seulement.
-- PostgreSQL 16 : accessible uniquement sur le réseau Docker interne.
-- `compose.yaml` : configuration Docker Compose pour le NAS Synology.
-- `apps/web/public/logo-bde.png` : logo officiel fourni par le BDE.
+Les cartes Kanban et leurs données ne sont **pas encore actives** : elles seront implémentées dans les blocs suivants. La page des tableaux est un squelette, non un outil de suivi fonctionnel.
 
-## Déploiement initial sur Synology (test local uniquement)
+## Configuration sur Synology
 
-1. Cloner le dépôt GitHub `Amin932/orga-alfiya` sur le NAS dans `/volume1/docker/orga-alfiya` (`git clone https://github.com/Amin932/orga-alfiya.git /volume1/docker/orga-alfiya`) ou utiliser un téléchargement du dépôt.
-2. Copier `.env.example` vers `.env` et remplacer `POSTGRES_PASSWORD` par une chaîne aléatoire **sans `@`, `:`, `/`, `#`, `%` ni espace**, car elle est intégrée à une URL PostgreSQL. Ne jamais commiter `.env`.
-3. Exécuter `docker compose up -d --build` depuis le répertoire du projet.
-4. Tester sur le NAS : `curl http://127.0.0.1:8092/api/health` et `curl http://127.0.0.1:8092/api/health/database`.
-5. Pour afficher l'interface depuis un poste de ton réseau local, lier temporairement `ORGA_HTTP_BIND` à l'IP LAN du NAS et accéder à `http://IP_DU_NAS:8092` (ne pas ouvrir ce port sur la box). Remettre `127.0.0.1` avant de passer par le reverse proxy.
+1. Cloner `https://github.com/Amin932/orga-alfiya.git` dans `/volume1/docker/orga-alfiya`.
+2. Copier `.env.example` vers `.env`, remplacer `POSTGRES_PASSWORD` avec un mot de passe aléatoire robuste (sans caractères spéciaux d'URL non encodés), `SUPERADMIN_EMAIL` par **ton adresse e-mail** et configurer `SMTP_HOST`, `SMTP_PORT`, `SMTP_USERNAME`, `SMTP_PASSWORD`, `SMTP_FROM` avec les paramètres de ton hébergeur mail. Ne jamais publier `.env`.
+3. Vérifier `ORGA_PUBLIC_URL` : c'est l'origine exacte utilisée dans le navigateur. Pour la mise en service, configurer le reverse proxy Synology en HTTPS (source `orga-alfiya.amvei.synology.me:443` vers `127.0.0.1:8092`) et un certificat valide avant de tester l'authentification. Ne pas exposer PostgreSQL ni l'API directement.
+4. Exécuter `docker compose config` puis `docker compose up -d --build` ; tester `docker compose ps` et `curl http://127.0.0.1:8092/api/health`.
+5. Sur l'URL HTTPS, saisir l'adresse `SUPERADMIN_EMAIL` et demander un lien de connexion. Le super-administrateur est créé lors du premier démarrage. En recevant le lien, accéder à l'administration, créer un projet et ses pôles, puis envoyer les invitations.
 
-## HTTPS et domaine cible (à configurer après les tests)
+**Sécurité :** par défaut, les sessions nécessitent HTTPS (`COOKIE_SECURE=true`). Les requêtes de modification requièrent un en-tête spécifique et une origine autorisée ; les liens d'invitation ne sont pas enregistrés dans les journaux du proxy (jeton dans le fragment d'URL). Ne pas configurer `COOKIE_SECURE=false` pour un site exposé : ce mode ne convient qu'à un essai strictement local et doit aussi être explicitement autorisé avec `ALLOW_INSECURE_LOCAL=yes`.
 
-Dans **Panneau de configuration → Portail de connexion → Avancé → Proxy inversé** de DSM, créer une règle HTTPS `orga-alfiya.amvei.synology.me:443` vers HTTP `127.0.0.1:8092` ; attribuer le certificat wildcard valide à ce sous-domaine, vérifier sa résolution et les paramètres réseau. La règle doit être testée depuis l'extérieur avant de considérer l'URL fonctionnelle. Ne jamais publier directement PostgreSQL ou le port 8000 de l'API.
+Le domaine visé peut nécessiter une configuration réseau complémentaire selon la connexion Internet du NAS. Ne pas ouvrir le port PostgreSQL sur Internet. Sauvegarder régulièrement le volume `pgdata` et les documents.
 
-L'application n'a pas encore de système de connexion, donc **ne pas exposer publiquement ce socle avant le bloc 2** (authentification et vérification des droits).
+## À compléter aux prochains blocs
 
-## État du dépôt GitHub
-
-Le code du bloc 1 a été publié directement sur la branche `main` de [Amin932/orga-alfiya](https://github.com/Amin932/orga-alfiya). Le logo officiel du BDE est inclus dans `apps/web/public/logo-bde.png`. Les projets et les cartes affichés actuellement sont uniquement des exemples de démonstration.
-
-## Commandes utiles
-
-```bash
-docker compose config
-docker compose up -d --build
-docker compose ps
-docker compose logs --tail=100 api
-docker compose logs --tail=100 web
-docker compose down
-```
-
-`docker compose down` ne supprime pas les volumes PostgreSQL et uploads. Ne jamais exécuter `docker compose down -v` sans sauvegarde.
-
-## Étapes prévues
-
-1. Socle technique et maquette visuelle (ce bloc).
-2. Invitations uniquement, session durable/révocable, autorisations projet et super-admin.
-3. Projets et pôles, affectations ordonnées, couleurs des membres.
-4. Kanban avec glisser-déposer souris/tactile, cartes persistantes et filtres.
-5. Bibliothèque globale de modèles et deux modèles officiels protégés.
-6. Checklists, commentaires, fichiers, historique, corbeille.
-7. Notifications internes, e-mail et push, rappels J-3/J-1/J/J+1.
-8. Tests, sauvegardes et ouverture de l'accès HTTPS public.
+- Gestion visuelle avancée des membres et de leurs affectations multiples (ordre des pôles, couleur du premier), suppression / modification des pôles.
+- Cartes, glisser-déposer sur ordinateur et mobile, filtres, gestion des modèles.
+- Checklists, commentaires, fichiers, historique et corbeille.
+- Notifications internes, SMTP et push, rappels d'échéance.
+- Tests d'intégration et revue de sécurité avant ouverture aux 25 membres.
