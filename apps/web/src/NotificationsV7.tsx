@@ -176,3 +176,36 @@ export function FollowCardV7({cardId}:{cardId:number}){
     {followed?'Abonné aux commentaires':'Suivre les commentaires'}
   </button>
 }
+
+
+export function CardRemindersV7({cardId}:{cardId:number}){
+  const [days,setDays]=useState<number[]>([3,1,0])
+  const [overdue,setOverdue]=useState(true)
+  const [busy,setBusy]=useState(false)
+  const [message,setMessage]=useState('')
+  useEffect(()=>{let active=true
+    void api<{days_before:number[];overdue_next_day:boolean}>('/api/cards/'+cardId+'/reminders')
+      .then(r=>{if(active){setDays(r.days_before);setOverdue(r.overdue_next_day)}})
+      .catch(()=>{if(active)setMessage('Impossible de lire les rappels.')})
+    return ()=>{active=false}
+  },[cardId])
+  async function save(){
+    setBusy(true);setMessage('')
+    try{
+      await api('/api/cards/'+cardId+'/reminders','PUT',{days_before:days,overdue_next_day:overdue})
+      setMessage('Rappels sauvegardés.')
+    }catch(e){setMessage(e instanceof Error?e.message:'Erreur de sauvegarde')}
+    finally{setBusy(false)}
+  }
+  return <section className="nt-reminders">
+    <strong>Rappels de la carte</strong>
+    <p>Activés lorsqu’une date d’échéance est renseignée. Aucun rappel pour les cartes terminées.</p>
+    <div>{[7,3,1,0].map(d=><label key={d}><input type="checkbox" checked={days.includes(d)}
+      onChange={e=>setDays(old=>e.target.checked?[...old,d].sort((a,b)=>b-a):old.filter(x=>x!==d))}/>
+      {d===0?'Le jour J':'J-'+d}</label>)}
+      <label><input type="checkbox" checked={overdue} onChange={e=>setOverdue(e.target.checked)}/>
+        J+1 si en retard (une seule fois)</label></div>
+    <button type="button" onClick={()=>void save()} disabled={busy}>Enregistrer les rappels</button>
+    {message&&<small role="status">{message}</small>}
+  </section>
+}
