@@ -1,12 +1,12 @@
 import { useCallback, useEffect, useState, type FormEvent } from 'react'
-import { ArrowLeft, LogOut, Plus, ShieldCheck } from 'lucide-react'
+import { LogOut, ShieldCheck } from 'lucide-react'
+import AdminWorkspace from './AdminWorkspace'
 import App from './App'
 
 type Pole = { id: number; project_id: number; name: string; color: string; description: string; project?: string }
 type Project = { id: number; name: string; description: string; poles: Pole[] }
 type User = { id: number; email: string; first_name: string; last_name: string; role: 'superadmin' | 'member' }
 type Profile = { user: User; projects: Project[]; poles: Pole[] }
-type UserRecord = User & { active: boolean }
 
 async function api<T>(path: string, body?: unknown): Promise<T> {
   const res = await fetch(path, { credentials: 'same-origin', method: body === undefined ? 'GET' : 'POST',
@@ -15,52 +15,6 @@ async function api<T>(path: string, body?: unknown): Promise<T> {
   const data = await res.json().catch(() => ({}))
   if (!res.ok) throw new Error(typeof data.detail === 'string' ? data.detail : 'Opération impossible')
   return data as T
-}
-
-function AdminPanel({ back }: { back: () => void }) {
-  const [projects, setProjects] = useState<Project[]>([])
-  const [users, setUsers] = useState<UserRecord[]>([])
-  const [name, setName] = useState('')
-  const [project, setProject] = useState('')
-  const [poleName, setPoleName] = useState('')
-  const [color, setColor] = useState('#B57460')
-  const [email, setEmail] = useState('')
-  const [selected, setSelected] = useState<number[]>([])
-  const [message, setMessage] = useState('')
-  const [busy, setBusy] = useState(false)
-  const refresh = useCallback(async () => {
-    const [workspace, members] = await Promise.all([api<{ projects: Project[] }>('/api/workspace'), api<UserRecord[]>('/api/admin/users')])
-    setProjects(workspace.projects); setUsers(members)
-  }, [])
-  useEffect(() => { refresh().catch(e => setMessage(e.message)) }, [refresh])
-  async function submit(action: () => Promise<unknown>) {
-    setBusy(true); setMessage('')
-    try { await action(); await refresh(); setMessage('Enregistré avec succès.') }
-    catch (e) { setMessage(e instanceof Error ? e.message : 'Erreur inconnue') }
-    finally { setBusy(false) }
-  }
-  return <div className="auth-admin">
-    <div className="auth-admin-head"><button className="auth-ghost" onClick={back}><ArrowLeft size={17}/> Retour aux projets</button><h1><ShieldCheck size={24}/> Administration</h1><p>Seul le super-administrateur peut gérer les invitations, les projets et les pôles.</p></div>
-    {message && <p className="auth-message" role="status">{message}</p>}
-    <div className="auth-admin-grid">
-      <section className="auth-panel"><h2>Créer un projet</h2><form onSubmit={e => { e.preventDefault(); void submit(async () => { await api('/api/admin/projects', { name }); setName('') }) }}>
-        <label>Nom du projet<input required minLength={2} maxLength={120} value={name} onChange={e => setName(e.target.value)} placeholder="Ex. BDE Alfiya" /></label><button disabled={busy || !name.trim()}><Plus size={16}/> Créer</button></form>
-      </section>
-      <section className="auth-panel"><h2>Créer un pôle</h2><form onSubmit={e => { e.preventDefault(); void submit(async () => { await api(`/api/admin/projects/${project}/poles`, { name: poleName, color }); setPoleName('') }) }}>
-        <label>Projet<select required value={project} onChange={e => setProject(e.target.value)}><option value="">Choisir un projet</option>{projects.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}</select></label>
-        <label>Nom du pôle<input required minLength={2} value={poleName} onChange={e => setPoleName(e.target.value)} placeholder="Ex. Trésorerie"/></label>
-        <label>Couleur<input type="color" value={color} onChange={e => setColor(e.target.value)}/></label><button disabled={busy || !project || !poleName.trim()}><Plus size={16}/> Ajouter le pôle</button></form>
-      </section>
-      <section className="auth-panel"><h2>Inviter un membre</h2><p className="auth-hint">Créez les projets et leurs pôles avant d'inviter les membres. Les accès aux projets sont définis ici, jamais par leur choix de pôle.</p>
-        <form onSubmit={e => { e.preventDefault(); void submit(async () => { await api('/api/admin/invitations', { email, project_ids: selected }); setEmail(''); setSelected([]) }) }}>
-          <label>Adresse e-mail<input type="email" required value={email} onChange={e => setEmail(e.target.value)} placeholder="membre@exemple.fr"/></label>
-          <div className="auth-field-title">Projets autorisés</div>{projects.map(p => <label key={p.id} className="auth-check"><input type="checkbox" checked={selected.includes(p.id)} onChange={e => setSelected(old => e.target.checked ? [...old,p.id] : old.filter(id => id !== p.id))}/>{p.name}</label>)}
-          <button disabled={busy || !email || selected.length === 0}>Envoyer l'invitation</button></form>
-      </section>
-      <section className="auth-panel"><h2>Membres</h2><div className="auth-users">{users.map(u => <div key={u.id} className="auth-user"><span><strong>{u.first_name ? `${u.first_name} ${u.last_name}` : u.email}</strong><small>{u.email} · {u.active ? 'Actif' : 'En attente'}</small></span>{u.role !== 'superadmin' && u.active && <button className="auth-danger" disabled={busy} onClick={() => { if (window.confirm(`Désactiver ${u.email} et fermer ses sessions ?`)) void submit(() => api(`/api/admin/users/${u.id}/disable`, {})) }}>Désactiver</button>}</div>)}</div></section>
-    </div>
-    <div className="auth-panel"><h2>Projets et pôles existants</h2>{projects.length === 0 ? <p>Aucun projet pour l'instant.</p> : projects.map(p => <div key={p.id} className="auth-summary"><strong>{p.name}</strong> {p.poles.map(po => <span key={po.id} className="auth-pole" style={{ borderColor: po.color }}>{po.name}</span>)}</div>)}</div>
-  </div>
 }
 
 function Activate({ token, onComplete }: { token: string; onComplete: () => void }) {
@@ -105,5 +59,5 @@ export default function AuthGate() {
   if (loading) return <main className="auth-background"><p>Chargement d'Orga Alfiya…</p></main>
   if (inviteToken) return <Activate token={inviteToken} onComplete={refresh}/>
   if (!profile) return <SignIn loginToken={loginToken} onComplete={refresh}/>
-  return <>{adminOpen && profile.user.role === 'superadmin' ? <AdminPanel back={() => { setAdminOpen(false); refresh() }}/> : <App viewer={profile.user}/>}<div className="auth-session-actions"><span>{profile.user.first_name || profile.user.email}</span>{profile.user.role === 'superadmin' && !adminOpen && <button onClick={() => setAdminOpen(true)}><ShieldCheck size={16}/> Administration</button>}<button onClick={() => void signOut()}><LogOut size={16}/> Déconnexion</button></div></>
+  return <>{adminOpen && profile.user.role === 'superadmin' ? <AdminWorkspace back={() => { setAdminOpen(false); refresh() }}/> : <App viewer={profile.user}/>}<div className="auth-session-actions"><span>{profile.user.first_name || profile.user.email}</span>{profile.user.role === 'superadmin' && !adminOpen && <button onClick={() => setAdminOpen(true)}><ShieldCheck size={16}/> Administration</button>}<button onClick={() => void signOut()}><LogOut size={16}/> Déconnexion</button></div></>
 }
