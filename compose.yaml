@@ -31,6 +31,12 @@ services:
       SMTP_FROM: ${SMTP_FROM:-}
       VAPID_PRIVATE_KEY_FILE: ${VAPID_PRIVATE_KEY_FILE:-/app/secrets/vapid_private.pem}
       VAPID_CONTACT: ${VAPID_CONTACT:-}
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/api/health/database', timeout=4).read()"]
+      interval: 20s
+      timeout: 6s
+      retries: 5
+      start_period: 90s
     depends_on:
       db:
         condition: service_healthy
@@ -59,7 +65,7 @@ services:
       db:
         condition: service_healthy
       api:
-        condition: service_started
+        condition: service_healthy
     volumes:
       - ./secrets:/app/secrets:ro
     networks: [backend]
@@ -69,7 +75,15 @@ services:
   web:
     build: ./apps/web
     restart: unless-stopped
-    depends_on: [api]
+    depends_on:
+      api:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "wget -q -O /dev/null http://127.0.0.1/ || exit 1"]
+      interval: 20s
+      timeout: 6s
+      retries: 5
+      start_period: 30s
     ports:
       - "${ORGA_HTTP_BIND:-127.0.0.1}:${ORGA_HTTP_PORT:-8092}:80"
     networks: [backend]
