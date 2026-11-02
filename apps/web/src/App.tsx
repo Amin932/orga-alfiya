@@ -18,7 +18,7 @@ const states: { id: Status; name: string; dot: string }[] = [
   { id: 'done', name: 'Terminé', dot: '#729c81' },
 ]
 
-function App({viewer}: {viewer: {first_name: string; email: string}}) {
+function App({ viewer, onAdmin }: { viewer: { first_name: string; email: string; primaryColor?: string }; onAdmin?: () => void }) {
   const [projects, setProjects] = useState<Project[]>([])
   useEffect(() => { fetch('/api/workspace', {credentials:'same-origin'}).then(r => r.ok ? r.json() : Promise.reject()).then(data => setProjects(data.projects.map((p: any) => ({...p,id:String(p.id),poles:p.poles.map((po: any)=>({...po,id:String(po.id)}))})))).catch(()=>setProjects([])) }, [])
   const [projectId, setProjectId] = useState<string | null>(null)
@@ -51,7 +51,8 @@ function App({viewer}: {viewer: {first_name: string; email: string}}) {
         <div className="topbar-actions">
           <span className={`service ${apiStatus}`} title="État de connexion à l'API"><span className="status-dot" />{apiStatus === 'online' ? 'API connectée' : apiStatus === 'offline' ? 'API indisponible' : 'Connexion…'}</span>
           <button className="icon-button" aria-label="Notifications (bloc suivant)" disabled><Bell size={19}/></button>
-          <span className="user-avatar" title={viewer.email}>{(viewer.first_name || viewer.email)[0].toUpperCase()}</span>
+          {onAdmin && <button className="icon-button" onClick={onAdmin} aria-label="Ouvrir l’administration" title="Administration"><ShieldCheck size={19}/></button>}
+          <span className="user-avatar" style={{ backgroundColor: viewer.primaryColor ?? undefined }} title={viewer.email}>{(viewer.first_name || viewer.email)[0].toUpperCase()}</span>
         </div>
       </header>
 
@@ -63,7 +64,7 @@ function App({viewer}: {viewer: {first_name: string; email: string}}) {
           {projects.map(project => (
             <button key={project.id} className={`side-link ${project.id === projectId ? 'active' : ''}`} onClick={() => goProject(project.id)}><FolderKanban size={18}/><span>{project.name}</span></button>
           ))}
-          <div className="sidebar-bottom"><ShieldCheck size={17}/><span>Accès et comptes au bloc 2</span></div>
+          <div className="sidebar-bottom"><ShieldCheck size={17}/><span>Mes projets et mes pôles</span></div>
         </aside>
 
         <main className="content">
