@@ -397,9 +397,15 @@ def update_access(user_id: int, body: AccessInput, request: Request, user=Depend
         found = conn.execute('SELECT id FROM projects WHERE id=ANY(%s)', (project_ids,)).fetchall() if project_ids else []
         if {x['id'] for x in found} != set(project_ids):
             raise HTTPException(422, 'Projet inconnu')
+        previous = {r['project_id'] for r in conn.execute(
+            'SELECT project_id FROM project_access WHERE user_id=%s', (user_id,)).fetchall()}
         conn.execute('DELETE FROM project_access WHERE user_id=%s', (user_id,))
         for p in project_ids:
             conn.execute('INSERT INTO project_access(user_id,project_id) VALUES (%s,%s)', (user_id,p))
+        for p in set(project_ids) - previous:
+            row = conn.execute('SELECT name FROM projects WHERE id=%s', (p,)).fetchone()
+            notify(conn,user_id,'project_access','Accès à un projet',
+                   f'Vous avez accès au projet « {row["name"]} ».',actor_id=user['id'])
         conn.execute('DELETE FROM user_poles WHERE user_id=%s AND pole_id NOT IN (SELECT id FROM poles WHERE project_id=ANY(%s))', (user_id, project_ids))
     return {'status': 'updated'}
 
