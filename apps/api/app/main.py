@@ -158,6 +158,7 @@ def startup():
     if not SECURE_COOKIE and os.getenv('ALLOW_INSECURE_LOCAL', '') != 'yes':
         raise RuntimeError('COOKIE_SECURE=false autorisé uniquement avec ALLOW_INSECURE_LOCAL=yes')
     schema()
+    schema_cards(db)
 
 
 @app.get('/api/health')
@@ -417,3 +418,7 @@ def disable_user(user_id: int, request: Request, user=Depends(admin)):
 # Bloc 3 : administration avancée, séparée du noyau d'authentification.
 from .admin_v3 import register_admin_routes
 register_admin_routes(app, db, require_request, admin)
+
+# Bloc 4 : tableau Kanban, cartes et contrôles d'accès.
+from .kanban import register_card_routes, schema_cards
+register_card_routes(app, db, current_user, admin, require_request)
