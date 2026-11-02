@@ -59,5 +59,5 @@ export default function AuthGate() {
   if (loading) return <main className="auth-background"><p>Chargement d'Orga Alfiya…</p></main>
   if (inviteToken) return <Activate token={inviteToken} onComplete={refresh}/>
   if (!profile) return <SignIn loginToken={loginToken} onComplete={refresh}/>
-  return <>{adminOpen && profile.user.role === 'superadmin' ? <AdminWorkspace back={() => { setAdminOpen(false); refresh() }}/> : <App viewer={profile.user}/>}<div className="auth-session-actions"><span>{profile.user.first_name || profile.user.email}</span>{profile.user.role === 'superadmin' && !adminOpen && <button onClick={() => setAdminOpen(true)}><ShieldCheck size={16}/> Administration</button>}<button onClick={() => void signOut()}><LogOut size={16}/> Déconnexion</button></div></>
+  return <>{adminOpen && profile.user.role === 'superadmin' ? <AdminWorkspace back={() => { setAdminOpen(false); refresh() }}/> : <App viewer={{ ...profile.user, primaryColor: profile.poles[0]?.color }} onAdmin={() => setAdminOpen(true)}/>}<div className="auth-session-actions"><span>{profile.user.first_name || profile.user.email}</span>{profile.user.role === 'superadmin' && !adminOpen && <button onClick={() => setAdminOpen(true)}><ShieldCheck size={16}/> Administration</button>}<button onClick={() => void signOut()}><LogOut size={16}/> Déconnexion</button></div></>
 }
