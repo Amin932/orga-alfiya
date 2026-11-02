@@ -10,30 +10,7 @@ type Project = { id: string; name: string; description: string; poles: Pole[] }
 type Status = 'todo' | 'progress' | 'done'
 type DemoCard = { id: number; title: string; pole: string; status: Status; date?: string; initials: string; checklist: string }
 
-const projects: Project[] = [
-  { id: 'bde', name: 'BDE Alfiya', description: 'Vie du BDE, activités et événements de l’institut.', poles: [
-    { id: 'spirituel', name: 'Vie spirituelle', color: '#6e9276', description: 'Conférences et moments de partage' },
-    { id: 'communication', name: 'Communication', color: '#648ca3', description: 'Visuels, publications et annonces' },
-    { id: 'tresorerie', name: 'Trésorerie', color: '#b7655e', description: 'Budgets et suivi financier' },
-    { id: 'elections', name: 'Élections présidentielles', color: '#ad8d65', description: 'Préparation et coordination' },
-  ] },
-  { id: 'ramadan', name: 'Ramadan 2027', description: 'Préparation et coordination du programme du Ramadan.', poles: [
-    { id: 'ramadan-evenements', name: 'Événements', color: '#6e9276', description: 'Rencontres et activités' },
-    { id: 'ramadan-com', name: 'Communication', color: '#648ca3', description: 'Diffusion du programme' },
-  ] },
-]
-
-const seedCards: DemoCard[] = [
-  { id: 1, title: 'Préparer la prochaine conférence', pole: 'spirituel', status: 'todo', date: '12 nov.', initials: 'CA', checklist: '0/7' },
-  { id: 2, title: 'Contacter les intervenants', pole: 'spirituel', status: 'progress', date: '18 nov.', initials: 'SA', checklist: '2/7' },
-  { id: 3, title: 'Programme du cercle de lecture', pole: 'spirituel', status: 'done', initials: 'FE', checklist: '7/7' },
-  { id: 4, title: 'Préparer les affiches', pole: 'communication', status: 'todo', date: '11 nov.', initials: 'RI', checklist: '1/5' },
-  { id: 5, title: 'Valider le calendrier de publication', pole: 'communication', status: 'progress', initials: 'HA', checklist: '3/5' },
-  { id: 6, title: 'Budget de la prochaine activité', pole: 'tresorerie', status: 'todo', initials: 'AM', checklist: '0/4' },
-  { id: 7, title: 'Organisation du scrutin', pole: 'elections', status: 'progress', initials: 'SA', checklist: '2/6' },
-  { id: 8, title: 'Préparer le programme', pole: 'ramadan-evenements', status: 'todo', initials: 'CA', checklist: '0/6' },
-  { id: 9, title: 'Annonce du programme', pole: 'ramadan-com', status: 'todo', initials: 'RI', checklist: '0/4' },
-]
+const seedCards: DemoCard[] = []
 
 const states: { id: Status; name: string; dot: string }[] = [
   { id: 'todo', name: 'À faire', dot: '#cf9a5a' },
@@ -41,7 +18,9 @@ const states: { id: Status; name: string; dot: string }[] = [
   { id: 'done', name: 'Terminé', dot: '#729c81' },
 ]
 
-function App() {
+function App({viewer}: {viewer: {first_name: string; email: string}}) {
+  const [projects, setProjects] = useState<Project[]>([])
+  useEffect(() => { fetch('/api/workspace', {credentials:'same-origin'}).then(r => r.ok ? r.json() : Promise.reject()).then(data => setProjects(data.projects.map((p: any) => ({...p,id:String(p.id),poles:p.poles.map((po: any)=>({...po,id:String(po.id)}))})))).catch(()=>setProjects([])) }, [])
   const [projectId, setProjectId] = useState<string | null>(null)
   const [poleId, setPoleId] = useState<string | null>(null)
   const [opened, setOpened] = useState<DemoCard | null>(null)
@@ -72,7 +51,7 @@ function App() {
         <div className="topbar-actions">
           <span className={`service ${apiStatus}`} title="État de connexion à l'API"><span className="status-dot" />{apiStatus === 'online' ? 'API connectée' : apiStatus === 'offline' ? 'API indisponible' : 'Connexion…'}</span>
           <button className="icon-button" aria-label="Notifications (bloc suivant)" disabled><Bell size={19}/></button>
-          <span className="user-avatar" title="Compte de démonstration">D</span>
+          <span className="user-avatar" title={viewer.email}>{(viewer.first_name || viewer.email)[0].toUpperCase()}</span>
         </div>
       </header>
 
@@ -80,7 +59,7 @@ function App() {
         <aside className="sidebar" aria-label="Navigation">
           <div className="side-label">ESPACE DE TRAVAIL</div>
           <button className={`side-link ${!currentProject ? 'active' : ''}`} onClick={goHome}><LayoutGrid size={18}/> Mes projets</button>
-          <div className="side-label side-label-projects">PROJETS DE DÉMONSTRATION</div>
+          <div className="side-label side-label-projects">MES PROJETS</div>
           {projects.map(project => (
             <button key={project.id} className={`side-link ${project.id === projectId ? 'active' : ''}`} onClick={() => goProject(project.id)}><FolderKanban size={18}/><span>{project.name}</span></button>
           ))}
@@ -88,7 +67,7 @@ function App() {
         </aside>
 
         <main className="content">
-          <div className="demo-strip"><span className="demo-pill">VERSION DE DÉMONSTRATION</span> Les projets, pôles et cartes ci-dessous sont des exemples non enregistrés.</div>
+          <div className="demo-strip"><span className="demo-pill">TABLEAU EN PRÉPARATION</span> Les projets et pôles sont enregistrés. Le tableau Kanban sera activé au bloc 4.</div>
           {!currentProject && (
             <>
               <div className="breadcrumbs"><span>Accueil</span></div>
