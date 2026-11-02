@@ -1,6 +1,8 @@
 import { useEffect, useState } from 'react'
 import { ArrowRight, Bell, ChevronRight, FolderKanban, LayoutGrid, ShieldCheck, Users } from 'lucide-react'
 import KanbanBoard from './KanbanBoard'
+import { TemplateLibrary } from './TemplatesV5'
+import { BookOpen } from 'lucide-react'
 
 type Pole = { id: number; project_id: number; name: string; color: string; description: string }
 type Project = { id: number; name: string; description: string; poles: Pole[] }
@@ -12,6 +14,7 @@ export default function App({ viewer, onAdmin }: { viewer: Viewer; onAdmin?: () 
   const [error, setError] = useState('')
   const [projectId, setProjectId] = useState<number | null>(null)
   const [poleId, setPoleId] = useState<number | null>(null)
+  const [libraryOpen, setLibraryOpen] = useState(false)
   useEffect(() => {
     let active = true
     fetch('/api/workspace', { credentials: 'same-origin' })
@@ -26,8 +29,8 @@ export default function App({ viewer, onAdmin }: { viewer: Viewer; onAdmin?: () 
   }, [])
   const project = projects.find(p => p.id === projectId) ?? null
   const pole = project?.poles.find(p => p.id === poleId) ?? null
-  function home() { setProjectId(null); setPoleId(null) }
-  function enterProject(id: number) { setProjectId(id); setPoleId(null) }
+  function home() { setLibraryOpen(false); setProjectId(null); setPoleId(null) }
+  function enterProject(id: number) { setLibraryOpen(false); setProjectId(id); setPoleId(null) }
 
   return <div className="app-shell">
     <header className="topbar">
@@ -37,6 +40,7 @@ export default function App({ viewer, onAdmin }: { viewer: Viewer; onAdmin?: () 
       </button>
       <div className="topbar-actions">
         <span className="service online"><span className="status-dot"/> Espace membres</span>
+        <button className="quiet-button" onClick={() => setLibraryOpen(open => !open)} title="Bibliothèque commune de modèles"><BookOpen size={17}/> Modèles</button>
         <button className="icon-button" disabled title="Notifications au bloc 7" aria-label="Notifications à venir"><Bell size={18}/></button>
         {onAdmin && <button className="icon-button" onClick={onAdmin} aria-label="Administration"><ShieldCheck size={19}/></button>}
         <span className="user-avatar" style={{ backgroundColor: viewer.primaryColor ?? undefined }} title={viewer.email}>{(viewer.first_name || viewer.email)[0].toUpperCase()}</span>
@@ -52,7 +56,7 @@ export default function App({ viewer, onAdmin }: { viewer: Viewer; onAdmin?: () 
       </aside>
       <main className="content">
         {error && <p role="alert" className="kb-error">{error}</p>}
-        {loading ? <p>Chargement de vos projets…</p> : !project ? <>
+        {libraryOpen ? <TemplateLibrary viewer={viewer} onClose={() => setLibraryOpen(false)}/> : loading ? <p>Chargement de vos projets…</p> : !project ? <>
           <div className="breadcrumbs">Accueil</div>
           <section className="page-title"><div><p className="eyebrow">BIENVENUE SUR ORGA ALFIYA</p><h1>Mes projets</h1><p>Organisez simplement les événements de votre BDE.</p></div><div className="title-decor"><img src="/logo-bde.png" alt=""/></div></section>
           <section className="section-heading"><div><h2>Espaces de travail</h2><p>Choisissez un projet pour retrouver ses pôles.</p></div><span className="count-chip">{projects.length} projets</span></section>
