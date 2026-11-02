@@ -10,7 +10,7 @@ import { CalendarDays, Check, ChevronDown, GripVertical, Plus, Search, Trash2, U
 import './kanban.css'
 import { CardTemplateContent, listTemplates, type Template as LibraryTemplate } from './TemplatesV5'
 import CollaborationV6 from './CollaborationV6'
-import { FollowCardV7 } from './NotificationsV7'
+import { FollowCardV7, CardRemindersV7 } from './NotificationsV7'
 
 type Status = 'todo' | 'progress' | 'done'
 type Template = 'free' | 'speaker' | 'no_speaker'
@@ -279,6 +279,7 @@ export default function KanbanBoard({ poleId, projectId, viewer }: Props) {
         </form>
         <CardTemplateContent cardId={opened.id}/>
         <FollowCardV7 cardId={opened.id}/>
+        <CardRemindersV7 cardId={opened.id}/>
         <CollaborationV6 cardId={opened.id} projectId={Number(projectId)} viewer={viewer} onChanged={async () => { const latest=await load(); setOpened(previous => previous ? latest.find(c=>c.id===previous.id) ?? previous : null) }}/>
         <div className="kb-assign"><h3><Users size={17}/> Responsables</h3><div className="kb-member-list">{members.map(m =>
           <label key={m.id}><input type="checkbox" disabled={busy} checked={opened.assignees.some(a => a.id === m.id)} onChange={e => void assign(m.id,e.target.checked)}/><span className="kb-person-tag" style={{ borderColor: m.color || '#c4b2a5' }}>{fullName(m)}</span></label>)}
