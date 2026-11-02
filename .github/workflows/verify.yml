@@ -67,3 +67,37 @@ jobs:
         run: pip install -r apps/api/requirements.txt pytest httpx
       - name: Tester le démarrage réel avec PostgreSQL
         run: pytest -q apps/api/tests/test_integration_v8.py
+
+
+  docker-smoke:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    env:
+      POSTGRES_DB: orgatest
+      POSTGRES_USER: orgatest
+      POSTGRES_PASSWORD: ci-password-not-for-production
+      SUPERADMIN_EMAIL: integration-admin@example.test
+      ORGA_PUBLIC_URL: https://orga-alfiya.amvei.synology.me
+      COOKIE_SECURE: "true"
+      ORGA_HTTP_BIND: 127.0.0.1
+      ORGA_HTTP_PORT: "8092"
+    steps:
+      - uses: actions/checkout@v4
+      - name: Vérifier les scripts shell
+        run: sh -n scripts/backup_nas.sh scripts/nas_preflight.sh
+      - name: Préparer le dossier des clés (non renseignées en CI)
+        run: mkdir -p secrets
+      - name: Vérifier le fichier Compose sans divulguer de secrets
+        run: docker compose config --quiet
+      - name: Construire et démarrer tous les services
+        run: docker compose up -d --build --wait --wait-timeout 240
+      - name: Vérifier le point d'entrée web et PostgreSQL
+        run: |
+          curl --fail --silent --show-error http://127.0.0.1:8092/api/health/database
+          curl --fail --silent --show-error http://127.0.0.1:8092/ >/dev/null
+      - name: Journaux en cas d'erreur
+        if: failure()
+        run: docker compose ps && docker compose logs --tail=100
+      - name: Arrêter les services
+        if: always()
+        run: docker compose down -v --remove-orphans
