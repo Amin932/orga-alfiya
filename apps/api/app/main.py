@@ -160,6 +160,7 @@ def startup():
     schema()
     schema_cards(db)
     schema_templates(db)
+    schema_collaboration(db)
 
 
 @app.get('/api/health')
@@ -427,3 +428,7 @@ register_card_routes(app, db, current_user, admin, require_request)
 # Bloc 5 : modèles officiels et personnalisés, champs et checklists.
 from .templates_v5 import schema_templates, register_template_routes
 register_template_routes(app, db, current_user, admin, require_request)
+
+# Bloc 6 : commentaires, mentions, fichiers privés, couverture et activité.
+from .collaboration_v6 import schema_collaboration, register_collaboration_routes
+register_collaboration_routes(app, db, current_user, require_request)
