@@ -15,3 +15,9 @@ coverage/
 data/
 *.pem
 *.key
+
+# Secrets et sauvegardes locales (ne jamais pousser sur GitHub)
+secrets/
+backups/
+*.dump
+*.tar.gz
