@@ -413,3 +413,7 @@ def disable_user(user_id: int, request: Request, user=Depends(admin)):
         conn.execute('DELETE FROM sessions WHERE user_id=%s', (user_id,))
         conn.execute('DELETE FROM auth_tokens WHERE user_id=%s', (user_id,))
     return {'status': 'disabled'}
+
+# Bloc 3 : administration avancée, séparée du noyau d'authentification.
+from .admin_v3 import register_admin_routes
+register_admin_routes(app, db, require_request, admin)
