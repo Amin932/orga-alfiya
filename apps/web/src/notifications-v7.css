@@ -26,3 +26,12 @@
 .nt-setting-actions button:disabled{opacity:.5}
 .nt-follow{display:flex;align-items:center;gap:7px;padding:9px 11px;border:1px solid #e4d5c6;border-radius:9px;background:#faf5ee;color:#9a614a;cursor:pointer;font-size:12px}
 @media(max-width:680px){.nt-panel{position:fixed;top:67px;left:10px;right:10px;width:auto;max-height:calc(100dvh - 85px)}}
+
+.nt-reminders{border:1px solid #e8dbce;border-radius:10px;background:#fdf9f5;padding:13px;margin:14px 0}
+.nt-reminders>strong{font-size:13px;color:#704e3d}
+.nt-reminders>p{font-size:11px;line-height:1.5;color:#927968}
+.nt-reminders>div{display:flex;flex-wrap:wrap;gap:11px;margin:10px 0}
+.nt-reminders label{display:flex;align-items:center;gap:5px;font-size:12px;color:#635348}
+.nt-reminders input{accent-color:#b57460}
+.nt-reminders button{border:1px solid #d8b7a5;background:#b57460;color:#fff;padding:8px 11px;border-radius:8px;font-size:12px;cursor:pointer}
+.nt-reminders small{display:block;margin-top:8px;color:#82614c;font-size:11px}
