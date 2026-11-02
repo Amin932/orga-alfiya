@@ -155,8 +155,11 @@ def register_admin_routes(app, db, require_request, admin):
                 raise HTTPException(404, "Pôle introuvable dans ce projet")
             if row["name"] != body.name:
                 raise HTTPException(422, "Confirmez le nom exact du pôle")
-            # Les membres perdent leur affectation au pôle, pas leur accès au projet.
-            # Les cartes futures devront référencer le pôle avec ON DELETE RESTRICT.
+            # Empêcher toute suppression en cascade de cartes et de pièces jointes.
+            if conn.execute("SELECT 1 FROM cards WHERE pole_id=%s LIMIT 1",
+                            (pole_id,)).fetchone():
+                raise HTTPException(409, "Ce pôle contient encore des cartes, y compris dans la corbeille")
+            # Les appartenances des membres sont supprimées, pas leurs accès aux projets.
             try:
                 conn.execute("DELETE FROM poles WHERE id=%s AND project_id=%s",
                              (pole_id, project_id))
