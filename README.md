@@ -1,8 +1,8 @@
-# Orga Alfiya — blocs 1 à 4
+# Orga Alfiya — blocs 1 à 5
 
 Application d'organisation du BDE Alfiya, hébergée sur NAS Synology, accessible à terme sur `https://orga-alfiya.amvei.synology.me/`.
 
-## Fonctionnalités disponibles (blocs 1 à 4)
+## Fonctionnalités disponibles (blocs 1 à 5)
 
 - Invitation **uniquement par le super-administrateur** ; lien individuel à usage unique valable 7 jours.
 - Le membre renseigne son nom, son prénom et choisit son premier pôle parmi ceux des projets autorisés.
@@ -26,7 +26,22 @@ Application d'organisation du BDE Alfiya, hébergée sur NAS Synology, accessibl
 - Mise à la corbeille réservée au **créateur** ou au **super-admin** ; restauration et suppression définitive réservées au super-admin dans l'onglet Corbeille.
 - Création et modifications vérifiées côté API ; protection des projets non autorisés et vérification des requêtes mutantes.
 
-**Limites actuelles :** les champs spécialisés et checklists des modèles, le chargement d'images, les commentaires, l'historique et les notifications arriveront dans les prochains blocs. Une carte choisissant un modèle conserve actuellement sa référence au modèle, mais n'affiche pas encore les champs préremplis. Les tableaux sont fonctionnels une fois déployés sur une base PostgreSQL, mais des tests d'utilisation sur ton NAS restent nécessaires.
+**Limites actuelles :** le chargement des images et documents, les commentaires, l'historique des actions et les notifications arriveront dans les prochains blocs. Les tableaux et modèles sont codés pour PostgreSQL, mais des tests d'utilisation sur ton NAS restent nécessaires.
+
+### Bloc 5 — Bibliothèque de modèles et checklists
+
+- Bibliothèque **commune à tous les projets**, accessible aux membres connectés ; deux modèles officiels initiaux : « Événement avec intervenant » et « Événement sans intervenant ».
+- Les modèles officiels peuvent être modifiés uniquement par le super-administrateur et ne peuvent pas être supprimés.
+- Les autres membres peuvent créer leurs propres modèles, et les modifier/supprimer eux-mêmes ; le super-administrateur peut également gérer les modèles personnalisés.
+- Dans une colonne Kanban, sélectionner « Saisie libre » ou un modèle de la bibliothèque, renseigner uniquement **le titre de la carte**, puis la créer immédiatement.
+- Les champs de description et d'informations sont facultatifs ; ils apparaissent dans la fiche de carte, classés par rubriques et remplissables ultérieurement.
+- Checklists « Préparation avant le jour J » et « Post-événement » fournies avec les deux modèles officiels, non cochées par défaut.
+- Checklists opérationnelles par carte : cocher/décocher, ajouter/supprimer des tâches et créer/supprimer des listes ; l'auteur de la validation d'une tâche est enregistré.
+- Une copie indépendante de chaque modèle est créée dans la carte ; les modifications ultérieures du modèle ne modifient **jamais les anciennes cartes**.
+- Migration automatique à l'initialisation pour les cartes « speaker » / « no_speaker » créées au bloc 4 : copie de la définition du modèle officiel courant et création des checklists.
+- Une suppression de modèle personnalisé n'efface pas les cartes déjà créées.
+
+**Actions manuelles à ce stade :** Google Agenda et Eventbrite figurent dans les checklists mais ne sont pas encore reliés automatiquement ; l'envoi de messages de restriction à des participants n'est jamais déclenché automatiquement.
 
 ## Configuration sur Synology
 
@@ -46,7 +61,7 @@ Le domaine visé peut nécessiter une configuration réseau complémentaire selo
 
 ## À compléter aux prochains blocs
 
-- Champs structurés des modèles officiels et bibliothèque de modèles personnalisés.
-- Checklists, commentaires, fichiers, historique et corbeille.
+- Commentaires, pièces jointes et images de couverture, historique des modifications (corbeille déjà disponible).
+- Édition avancée des tâches des checklists et amélioration de l'ergonomie.
 - Notifications internes, SMTP et push, rappels d'échéance.
 - Tests d'intégration et revue de sécurité avant ouverture aux 25 membres.
