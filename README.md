@@ -1,8 +1,8 @@
-# Orga Alfiya — blocs 1 à 7
+# Orga Alfiya — blocs 1 à 8
 
 Application d'organisation du BDE Alfiya, hébergée sur NAS Synology, accessible à terme sur `https://orga-alfiya.amvei.synology.me/`.
 
-## Fonctionnalités disponibles (blocs 1 à 7)
+## Fonctionnalités disponibles (blocs 1 à 8)
 
 - Invitation **uniquement par le super-administrateur** ; lien individuel à usage unique valable 7 jours.
 - Le membre renseigne son nom, son prénom et choisit son premier pôle parmi ceux des projets autorisés.
@@ -97,6 +97,19 @@ docker compose logs --tail=100 notification-worker
 Pour les push, l'utilisateur doit autoriser les notifications ; un navigateur compatible et une origine HTTPS sont requis. Sur iPhone, installer la PWA sur l'écran d'accueil. Les e-mails exigent une configuration SMTP valide. Sans clé VAPID, le centre de notifications peut fonctionner, mais pas le push.
 
 **Sécurité :** ne pas exposer ce service aux membres avant tests réels de PostgreSQL, du SMTP, des push et des sauvegardes.
+
+## Bloc 8 — Préparation de la mise en service Synology
+
+**Guide de déploiement détaillé : [DEPLOIEMENT_SYNOLOGY.md](DEPLOIEMENT_SYNOLOGY.md).**
+
+- Conteneurs API, PostgreSQL et Nginx munis de contrôles de santé ; démarrage du frontend et du worker après disponibilité de l'API.
+- Test automatisé avec un **PostgreSQL réel** pour valider la création de projet, pôle, carte, modèle, commentaires, checklists et notifications.
+- Workflow Docker qui compile et lance les conteneurs ensemble, puis vérifie les points d'entrée de l'application.
+- Script `scripts/nas_preflight.sh` pour vérifier les prérequis et les paramètres locaux sans publier les secrets.
+- Script `scripts/backup_nas.sh` pour sauvegarder la base et les documents en maintenance et redémarrer les services.
+- Les fichiers `.env`, les clés privées et les dossiers de sauvegarde ne doivent jamais être transférés sur GitHub.
+
+**Déploiement effectif sur le NAS : pas encore réalisé depuis ce dépôt.** L'URL HTTPS ne doit pas être présentée comme opérationnelle tant qu'un test réel depuis l'extérieur n'a pas réussi.
 
 ## Configuration sur Synology
 
