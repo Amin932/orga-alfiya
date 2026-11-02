@@ -5,6 +5,7 @@ from typing import Literal
 from fastapi import Depends, HTTPException, Request
 from pydantic import BaseModel, Field, model_validator
 from .templates_v5 import instantiate_template
+from .collaboration_v6 import record_activity, purge_card_files, unlink_stored_files
 
 Status = Literal["todo", "progress", "done"]
 Template = Literal["free", "speaker", "no_speaker"]
@@ -117,7 +118,7 @@ def register_card_routes(app, db, current_user, admin, require_request):
     def list_cards(pole_id: int, user=Depends(current_user)):
         with db() as conn:
             pole_access(conn, pole_id, user)
-            cards = conn.execute("""SELECT c.id,c.pole_id,c.title,c.description,c.template_key,c.template_id,
+            cards = conn.execute("""SELECT c.id,c.pole_id,c.title,c.description,c.template_key,c.template_id,c.cover_attachment_id,
                 c.status,c.position,c.start_date,c.due_date,c.created_at,c.updated_at,
                 c.created_by,u.first_name AS author_first_name,u.last_name AS author_last_name
                 FROM cards c JOIN users u ON u.id=c.created_by
@@ -154,6 +155,8 @@ def register_card_routes(app, db, current_user, admin, require_request):
             if template:
                 instantiate_template(conn, card["id"], template)
                 card["template_id"] = template["id"]
+            record_activity(conn,card["id"],user["id"],"card_created",
+                            {"title":title,"status":body.status})
             return as_dict(conn, card)
 
     @app.patch("/api/cards/{card_id}")
@@ -176,6 +179,7 @@ def register_card_routes(app, db, current_user, admin, require_request):
             args = [values[key] for key in sorted(values)]
             row = conn.execute(f"UPDATE cards SET {columns},updated_at=now() WHERE id=%s RETURNING *",
                                (*args, card_id)).fetchone()
+            record_activity(conn,card_id,user["id"],"card_updated",{"fields":sorted(values)})
             return as_dict(conn, row)
 
     @app.get("/api/projects/{project_id}/card-members")
@@ -216,6 +220,7 @@ def register_card_routes(app, db, current_user, admin, require_request):
                 conn.execute("INSERT INTO card_assignees(card_id,user_id) VALUES (%s,%s)",
                              (card_id,member_id))
             conn.execute("UPDATE cards SET updated_at=now() WHERE id=%s", (card_id,))
+            record_activity(conn,card_id,user["id"],"assignees_changed",{"member_ids":ids})
             return as_dict(conn, card)
 
     @app.post("/api/cards/{card_id}/move")
@@ -252,6 +257,8 @@ def register_card_routes(app, db, current_user, admin, require_request):
                     conn.execute("""UPDATE cards SET status=%s,position=%s,
                         updated_at=CASE WHEN id=%s THEN now() ELSE updated_at END
                         WHERE id=%s""", (status,pos,card_id,current_id))
+            record_activity(conn,card_id,user["id"],"card_moved",
+                            {"from":card["status"],"to":body.status})
             return {"status": "updated"}
 
     @app.post("/api/cards/{card_id}/trash")
@@ -264,6 +271,7 @@ def register_card_routes(app, db, current_user, admin, require_request):
             if card["deleted_at"]:
                 raise HTTPException(410, "Carte déjà placée dans la corbeille")
             conn.execute("UPDATE cards SET deleted_at=now(),updated_at=now() WHERE id=%s", (card_id,))
+            record_activity(conn,card_id,user["id"],"card_trashed")
         return {"status": "trashed"}
 
     @app.get("/api/admin/cards/trash")
@@ -282,6 +290,7 @@ def register_card_routes(app, db, current_user, admin, require_request):
             if not row or row["deleted_at"] is None:
                 raise HTTPException(404, "Carte introuvable dans la corbeille")
             conn.execute("UPDATE cards SET deleted_at=NULL,updated_at=now() WHERE id=%s", (card_id,))
+            record_activity(conn,card_id,user["id"],"card_restored")
         return {"status": "restored"}
 
     @app.delete("/api/admin/cards/{card_id}")
@@ -292,5 +301,7 @@ def register_card_routes(app, db, current_user, admin, require_request):
                                (card_id,)).fetchone()
             if not row or row["deleted_at"] is None:
                 raise HTTPException(404, "La carte doit être dans la corbeille")
+            stored_names = purge_card_files(conn,card_id)
             conn.execute("DELETE FROM cards WHERE id=%s", (card_id,))
+        unlink_stored_files(stored_names)
         return {"status": "deleted"}
