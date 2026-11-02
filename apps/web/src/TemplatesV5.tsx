@@ -1,5 +1,5 @@
 import { useEffect, useState, type FormEvent } from 'react'
-import { Check, ChevronDown, Plus, Save, Trash2, X } from 'lucide-react'
+import { ChevronDown, Plus, Save, Trash2, X } from 'lucide-react'
 import './templates.css'
 
 export type FieldSpec = { key: string; label: string; section: string; kind: 'text' | 'longtext' | 'choice' | 'yesno' | 'number' | 'date' | 'time'; options: string[] }
