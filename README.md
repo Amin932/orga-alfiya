@@ -14,7 +14,7 @@ Application de gestion des projets, pôles, événements et missions du BDE de l
 
 ## Déploiement initial sur Synology (test local uniquement)
 
-1. Copier le contenu de ce ZIP dans le dépôt GitHub `Amin932/orga-alfiya` (ou transférer directement le dossier sur le NAS dans `/volume1/docker/orga-alfiya`). Une fois le dépôt rempli, on pourra aussi le cloner.
+1. Cloner le dépôt GitHub `Amin932/orga-alfiya` sur le NAS dans `/volume1/docker/orga-alfiya` (`git clone https://github.com/Amin932/orga-alfiya.git /volume1/docker/orga-alfiya`) ou utiliser un téléchargement du dépôt.
 2. Copier `.env.example` vers `.env` et remplacer `POSTGRES_PASSWORD` par une chaîne aléatoire **sans `@`, `:`, `/`, `#`, `%` ni espace**, car elle est intégrée à une URL PostgreSQL. Ne jamais commiter `.env`.
 3. Exécuter `docker compose up -d --build` depuis le répertoire du projet.
 4. Tester sur le NAS : `curl http://127.0.0.1:8092/api/health` et `curl http://127.0.0.1:8092/api/health/database`.
@@ -28,7 +28,7 @@ L'application n'a pas encore de système de connexion, donc **ne pas exposer pub
 
 ## État du dépôt GitHub
 
-Le dépôt initial est vide. Si la connexion GitHub utilisée ne dispose pas du droit `Contents: write`, le transfert initial devra être effectué depuis Git local ou GitHub Web. Le ZIP livré contient les fichiers prêts à importer, **y compris le logo officiel**.
+Le code du bloc 1 a été publié directement sur la branche `main` de [Amin932/orga-alfiya](https://github.com/Amin932/orga-alfiya). Le logo officiel du BDE est inclus dans `apps/web/public/logo-bde.png`. Les projets et les cartes affichés actuellement sont uniquement des exemples de démonstration.
 
 ## Commandes utiles
 
