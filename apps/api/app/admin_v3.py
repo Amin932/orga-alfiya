@@ -64,13 +64,17 @@ def register_admin_routes(app, db, require_request, admin):
                                   (user_id,)).fetchone()
             if not target:
                 raise HTTPException(404, "Membre introuvable")
-            if target["role"] == "superadmin":
-                raise HTTPException(403, "Compte super-administrateur protégé")
+            if target["role"] == "superadmin" and user_id != _user["id"]:
+                raise HTTPException(403, "Seul le super-administrateur concerné peut choisir ses pôles")
             if not target["active"]:
                 raise HTTPException(409, "Le membre doit d'abord activer son compte")
-            rows = conn.execute("""SELECT p.id FROM poles p JOIN project_access pa
-                ON pa.project_id=p.project_id
-                WHERE pa.user_id=%s AND p.id=ANY(%s)""", (user_id, pole_ids)).fetchall() if pole_ids else []
+            if target["role"] == "superadmin":
+                rows = conn.execute("SELECT id FROM poles WHERE id=ANY(%s)",
+                                    (pole_ids,)).fetchall() if pole_ids else []
+            else:
+                rows = conn.execute("""SELECT p.id FROM poles p JOIN project_access pa
+                    ON pa.project_id=p.project_id
+                    WHERE pa.user_id=%s AND p.id=ANY(%s)""", (user_id, pole_ids)).fetchall() if pole_ids else []
             if {r["id"] for r in rows} != set(pole_ids):
                 raise HTTPException(422, "Pôle absent ou projet non autorisé")
             conn.execute("DELETE FROM user_poles WHERE user_id=%s", (user_id,))
