@@ -8,13 +8,14 @@ import { SortableContext, useSortable, sortableKeyboardCoordinates, verticalList
 import { CSS } from '@dnd-kit/utilities'
 import { CalendarDays, Check, ChevronDown, GripVertical, Plus, Search, Trash2, Users, X } from 'lucide-react'
 import './kanban.css'
+import { CardTemplateContent, listTemplates, type Template as LibraryTemplate } from './TemplatesV5'
 
 type Status = 'todo' | 'progress' | 'done'
 type Template = 'free' | 'speaker' | 'no_speaker'
 type Member = { id: number; first_name: string; last_name: string; color: string | null }
 type Card = {
   id: number; title: string; description: string; status: Status; position: number;
-  start_date: string | null; due_date: string | null; template_key: Template;
+  start_date: string | null; due_date: string | null; template_key: Template; template_id: number | null;
   created_by: number; author_first_name?: string; author_last_name?: string;
   assignees: Member[];
 }
@@ -102,11 +103,13 @@ export default function KanbanBoard({ poleId, projectId, viewer }: Props) {
   const [draft, setDraft] = useState({ title: '', description: '', start_date: '', due_date: '' })
   const [createFor, setCreateFor] = useState<Status | null>(null)
   const [newTitle, setNewTitle] = useState('')
-  const [newTemplate, setNewTemplate] = useState<Template>('free')
+  const [newTemplate, setNewTemplate] = useState<string>('free')
+  const [templates, setTemplates] = useState<LibraryTemplate[]>([])
   const [busy, setBusy] = useState(false)
   const [dragId, setDragId] = useState<number | null>(null)
   const [filters, setFilters] = useState<Record<Status, Filter>>({ todo: emptyFilter(), progress: emptyFilter(), done: emptyFilter() })
 
+  useEffect(() => { void listTemplates().then(setTemplates).catch(() => setError('Bibliothèque de modèles indisponible')) }, [])
   const load = useCallback(async () => {
     const result = await api<{ cards: Card[] }>('/api/poles/' + poleId + '/cards')
     setCards(result.cards)
@@ -183,7 +186,12 @@ export default function KanbanBoard({ poleId, projectId, viewer }: Props) {
     if (!createFor || !newTitle.trim()) return
     setBusy(true); setError('')
     try {
-      await api('/api/poles/' + poleId + '/cards','POST',{ title: newTitle.trim(), status: createFor, template_key: newTemplate })
+      const selected = templates.find(t => String(t.id) === newTemplate)
+      await api('/api/poles/' + poleId + '/cards','POST',{
+        title: newTitle.trim(),status:createFor,
+        template_key: selected?.slug === 'speaker' || selected?.slug === 'no_speaker' ? selected.slug : 'free',
+        template_id: selected?.id ?? null
+      })
       await load(); setCreateFor(null); setNewTitle(''); setNewTemplate('free')
     } catch (e) { setError(e instanceof Error ? e.message : 'Création impossible') }
     finally { setBusy(false) }
@@ -197,7 +205,7 @@ export default function KanbanBoard({ poleId, projectId, viewer }: Props) {
         title: draft.title.trim(), description: draft.description,
         start_date: draft.start_date || null, due_date: draft.due_date || null
       })
-      await load(); setOpened(null)
+      await load(); setOpened(previous => previous ? {...previous,...draft,start_date:draft.start_date || null,due_date:draft.due_date || null} : null)
     } catch (e) { setError(e instanceof Error ? e.message : 'Enregistrement impossible') }
     finally { setBusy(false) }
   }
@@ -235,17 +243,17 @@ export default function KanbanBoard({ poleId, projectId, viewer }: Props) {
       <section className="detail-modal kb-modal" role="dialog" aria-modal="true" aria-label="Nouvelle carte" onClick={e => e.stopPropagation()}>
         <div className="modal-top"><strong>Créer une carte</strong><button className="icon-button" onClick={() => setCreateFor(null)} aria-label="Fermer"><X size={19}/></button></div>
         <form onSubmit={createCard} className="kb-form">
-          <label>Type de carte<select value={newTemplate} onChange={e => setNewTemplate(e.target.value as Template)}>
-            <option value="free">Saisie libre</option><option value="speaker">Événement avec intervenant</option><option value="no_speaker">Événement sans intervenant</option>
+          <label>Type de carte<select value={newTemplate} onChange={e => setNewTemplate(e.target.value)}>
+            <option value="free">Saisie libre</option>{templates.map(t => <option key={t.id} value={String(t.id)}>{t.name}{t.official ? ' — officiel' : ''}</option>)}
           </select></label>
           <label>Titre (obligatoire)<input required maxLength={180} autoFocus placeholder="Ex. Conférence du vendredi" value={newTitle} onChange={e => setNewTitle(e.target.value)}/></label>
-          <p>Tous les autres champs pourront être complétés après la création. Les checklists des modèles seront disponibles au bloc 5.</p>
+          <p>Tous les autres champs pourront être complétés après la création. Le modèle sera copié dans la carte, avec ses champs facultatifs et checklists.</p>
           <button className="primary-button" disabled={busy || !newTitle.trim()}><Plus size={15}/> Créer la carte</button>
         </form>
       </section></div>}
     {opened && <div className="overlay" role="presentation" onClick={() => setOpened(null)}>
       <section className="detail-modal kb-modal kb-detail" role="dialog" aria-modal="true" aria-label={opened.title} onClick={e => e.stopPropagation()}>
-        <div className="modal-top"><span className="kb-tag">{opened.template_key === 'free' ? 'Carte libre' : 'Événement — modèle officiel'}</span><button className="icon-button" onClick={() => setOpened(null)} aria-label="Fermer"><X size={20}/></button></div>
+        <div className="modal-top"><span className="kb-tag">{opened.template_id ? (templates.find(t => t.id === opened.template_id)?.name || 'Carte avec modèle') : 'Carte libre'}</span><button className="icon-button" onClick={() => setOpened(null)} aria-label="Fermer"><X size={20}/></button></div>
         <form className="kb-form" onSubmit={saveCard}>
           <label>Titre<input required maxLength={180} value={draft.title} onChange={e => setDraft(d => ({ ...d, title: e.target.value }))}/></label>
           <label>Description<textarea rows={5} maxLength={20000} placeholder="À compléter au fur et à mesure…" value={draft.description} onChange={e => setDraft(d => ({ ...d, description: e.target.value }))}/></label>
@@ -253,6 +261,7 @@ export default function KanbanBoard({ poleId, projectId, viewer }: Props) {
             <label>Échéance<input type="date" value={draft.due_date} onChange={e => setDraft(d => ({ ...d, due_date: e.target.value }))}/></label></div>
           <button className="primary-button" disabled={busy || !draft.title.trim()}><Check size={16}/> Enregistrer</button>
         </form>
+        <CardTemplateContent cardId={opened.id}/>
         <div className="kb-assign"><h3><Users size={17}/> Responsables</h3><div className="kb-member-list">{members.map(m =>
           <label key={m.id}><input type="checkbox" disabled={busy} checked={opened.assignees.some(a => a.id === m.id)} onChange={e => void assign(m.id,e.target.checked)}/><span className="kb-person-tag" style={{ borderColor: m.color || '#c4b2a5' }}>{fullName(m)}</span></label>)}
           {!members.length && <p>Aucun membre disponible.</p>}</div></div>
