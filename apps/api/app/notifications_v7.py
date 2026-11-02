@@ -31,6 +31,10 @@ class PushSubscriptionInput(BaseModel):
 class FollowInput(BaseModel):
     follow: bool
 
+
+class PushUnsubscribe(BaseModel):
+    endpoint: str | None = Field(default=None,max_length=2048)
+
 class ReminderInput(BaseModel):
     days_before: list[int] = Field(default_factory=lambda:[3,1,0],max_length=4)
     overdue_next_day: bool = True
@@ -316,8 +320,13 @@ def register_notification_routes(app, db, current_user, require_request):
         return {"status":"subscribed"}
 
     @app.delete("/api/notifications/push-subscriptions")
-    def unsubscribe(request:Request,user=Depends(current_user)):
+    def unsubscribe(request:Request,body:PushUnsubscribe | None=None,
+                    user=Depends(current_user)):
         require_request(request)
         with db() as conn:
-            conn.execute("DELETE FROM push_subscriptions WHERE user_id=%s",(user["id"],))
+            if body and body.endpoint:
+                conn.execute("""DELETE FROM push_subscriptions WHERE user_id=%s
+                    AND endpoint=%s""",(user["id"],body.endpoint))
+            else:
+                conn.execute("DELETE FROM push_subscriptions WHERE user_id=%s",(user["id"],))
         return {"status":"unsubscribed"}
