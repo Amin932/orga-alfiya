@@ -3,11 +3,9 @@ import hashlib
 import os
 import re
 import secrets
-import smtplib
-import ssl
 from datetime import datetime, timedelta, timezone
-from email.message import EmailMessage
 from urllib.parse import urlsplit
+from argon2 import PasswordHasher, exceptions as argon_errors
 
 import psycopg
 from psycopg.rows import dict_row
@@ -18,6 +16,8 @@ DATABASE_URL = os.environ.get('DATABASE_URL', '')
 PUBLIC_URL = os.environ.get('ORGA_PUBLIC_URL', 'https://orga-alfiya.amvei.synology.me').rstrip('/')
 SECURE_COOKIE = os.environ.get('COOKIE_SECURE', 'true').lower() == 'true'
 SESSION_DAYS = 90
+PASSWORD_HASHER = PasswordHasher(time_cost=3,memory_cost=32768,parallelism=2)
+DUMMY_PASSWORD_HASH = PASSWORD_HASHER.hash('mot-de-passe-factice-pour-verification-de-temps')
 app = FastAPI(title='Orga Alfiya API', version='0.2.0', docs_url=None, redoc_url=None, openapi_url=None)
 
 
@@ -56,6 +56,20 @@ class EmailInput(BaseModel):
     email: str
 
 
+class CredentialsInput(EmailInput):
+    password: str = Field(min_length=1,max_length=128)
+
+
+class ResetPasswordInput(BaseModel):
+    token: str = Field(min_length=20,max_length=256)
+    password: str = Field(min_length=12,max_length=128)
+
+
+class ChangePasswordInput(BaseModel):
+    current_password: str
+    new_password: str = Field(min_length=12,max_length=128)
+
+
 class TokenInput(BaseModel):
     token: str = Field(min_length=20, max_length=256)
 
@@ -64,6 +78,7 @@ class ActivationInput(TokenInput):
     first_name: str = Field(min_length=1, max_length=80)
     last_name: str = Field(min_length=1, max_length=80)
     pole_id: int | None = None
+    password: str = Field(min_length=12,max_length=128)
 
 
 class InviteInput(EmailInput):
@@ -85,23 +100,17 @@ class AccessInput(BaseModel):
     project_ids: list[int] = Field(default_factory=list, max_length=100)
 
 
-def mail(to, subject, body):
-    host, user, password, sender = (os.getenv(x, '') for x in ('SMTP_HOST', 'SMTP_USERNAME', 'SMTP_PASSWORD', 'SMTP_FROM'))
-    port = int(os.getenv('SMTP_PORT', '465'))
-    if not all((host, user, password, sender)) or port not in (465, 587):
-        raise RuntimeError('SMTP non configuré (465 SSL ou 587 STARTTLS)')
-    msg = EmailMessage()
-    msg['From'], msg['To'], msg['Subject'] = sender, to, subject
-    msg.set_content(body)
-    if port == 465:
-        with smtplib.SMTP_SSL(host, port, timeout=15, context=ssl.create_default_context()) as smtp:
-            smtp.login(user, password)
-            smtp.send_message(msg)
-    else:
-        with smtplib.SMTP(host, port, timeout=15) as smtp:
-            smtp.starttls(context=ssl.create_default_context())
-            smtp.login(user, password)
-            smtp.send_message(msg)
+def ensure_password(password):
+    if len(password) < 12 or len(password) > 128:
+        raise HTTPException(422, 'Mot de passe : entre 12 et 128 caractères')
+
+
+def verify_password(encoded, password):
+    try:
+        return PASSWORD_HASHER.verify(encoded or DUMMY_PASSWORD_HASH, password)
+    except (argon_errors.VerifyMismatchError, argon_errors.VerificationError,
+            argon_errors.InvalidHashError):
+        return False
 
 
 def schema():
@@ -139,16 +148,25 @@ def schema():
             "CREATE INDEX IF NOT EXISTS login_requests_created_idx ON login_requests(created_at)",
             "CREATE INDEX IF NOT EXISTS auth_tokens_user_idx ON auth_tokens(user_id)",
             "CREATE INDEX IF NOT EXISTS sessions_user_idx ON sessions(user_id)",
+            "ALTER TABLE users ADD COLUMN IF NOT EXISTS password_hash TEXT",
         ]:
             conn.execute(statement)
         admin_email = os.getenv('SUPERADMIN_EMAIL', '').strip()
         if admin_email:
             admin_email = clean_email(admin_email)
-            existing = conn.execute("SELECT 1 FROM users WHERE role='superadmin' LIMIT 1").fetchone()
-            if not existing:
-                conn.execute("""INSERT INTO users (email, first_name, role, active)
-                    VALUES (%s,'Administrateur','superadmin',true)
-                    ON CONFLICT (email) DO UPDATE SET role='superadmin', active=true""", (admin_email,))
+            existing = conn.execute("SELECT id,password_hash FROM users WHERE role='superadmin' LIMIT 1").fetchone()
+            if not existing or not existing['password_hash']:
+                initial_password = os.getenv('SUPERADMIN_INITIAL_PASSWORD','')
+                if len(initial_password) < 16 or len(initial_password) > 128:
+                    raise RuntimeError('SUPERADMIN_INITIAL_PASSWORD requis (16 à 128 caractères) pour initialiser le super-admin sans SMTP')
+                encoded=PASSWORD_HASHER.hash(initial_password)
+                if not existing:
+                    conn.execute("""INSERT INTO users (email,first_name,role,active,password_hash)
+                        VALUES (%s,'Administrateur','superadmin',true,%s)
+                        ON CONFLICT(email) DO UPDATE SET role='superadmin',active=true,password_hash=EXCLUDED.password_hash""",
+                        (admin_email,encoded))
+                else:
+                    conn.execute("UPDATE users SET password_hash=%s WHERE id=%s",(encoded,existing['id']))
 
 
 @app.on_event('startup')
@@ -222,48 +240,60 @@ def me(user=Depends(current_user)):
     return {'user': user, 'projects': projects, 'poles': poles}
 
 
-@app.post('/api/auth/request-link')
-def request_link(body: EmailInput, request: Request):
+@app.post('/api/auth/login')
+def login(body: CredentialsInput, request: Request, response: Response):
     require_request(request)
     email = clean_email(body.email)
     ip = (request.headers.get('x-real-ip') or (request.client.host if request.client else ''))[:120]
-    ip_hash = digest(ip)
-    # Réponse identique pour adresses connues et inconnues; limitation par adresse et IP.
     with db() as conn:
-        by_email = conn.execute("SELECT 1 FROM login_requests WHERE email=%s AND created_at>now()-interval '3 minutes'", (email,)).fetchone()
-        by_ip = conn.execute("SELECT count(*) AS count FROM login_requests WHERE ip_hash=%s AND created_at>now()-interval '1 hour'", (ip_hash,)).fetchone()
-        if by_email or by_ip['count'] >= 8:
-            return {'message': 'Si ce compte existe, un lien de connexion sera envoyé.'}
-        conn.execute('INSERT INTO login_requests(email,ip_hash) VALUES (%s,%s)', (email, ip_hash))
-        user = conn.execute('SELECT id FROM users WHERE email=%s AND active=true', (email,)).fetchone()
-        if user:
-            secret = secrets.token_urlsafe(40)
-            conn.execute("DELETE FROM auth_tokens WHERE user_id=%s AND purpose='login'", (user['id'],))
-            conn.execute("INSERT INTO auth_tokens(token_hash,user_id,purpose,expires_at) VALUES (%s,%s,'login',%s)",
-                         (digest(secret), user['id'], now() + timedelta(minutes=20)))
-    if user:
-        try:
-            mail(email, 'Votre lien de connexion Orga Alfiya',
-                 f'Voici votre lien personnel, valable 20 minutes et utilisable une fois :\n\n{PUBLIC_URL}/#login={secret}\n\nSi vous ne l\'avez pas demandé, ignorez ce message.')
-        except Exception:
-            # Ne pas exposer la configuration SMTP ni l'existence du compte.
-            import logging
-            logging.getLogger('orga.auth').exception('Échec SMTP connexion')
-    return {'message': 'Si ce compte existe, un lien de connexion sera envoyé.'}
+        attempts_email = conn.execute("""SELECT count(*) AS total FROM login_requests
+            WHERE email=%s AND created_at>now()-interval '15 minutes'""",(email,)).fetchone()['total']
+        attempts_ip = conn.execute("""SELECT count(*) AS total FROM login_requests
+            WHERE ip_hash=%s AND created_at>now()-interval '1 hour'""",
+            (digest(ip),)).fetchone()['total']
+        if attempts_email >= 8 or attempts_ip >= 100:
+            raise HTTPException(429,'Trop de tentatives. Réessayez plus tard.')
+        conn.execute("INSERT INTO login_requests(email,ip_hash) VALUES(%s,%s)",(email,digest(ip)))
+        user=conn.execute("""SELECT id,password_hash FROM users
+            WHERE email=%s AND active=true""",(email,)).fetchone()
+        if not verify_password(user['password_hash'] if user else None,body.password) or not user or not user['password_hash']:
+            raise HTTPException(401,'Identifiants invalides')
+        set_session(conn,response,user['id'])
+    return {'status':'connected'}
 
 
-@app.post('/api/auth/login')
-def login(body: TokenInput, request: Request, response: Response):
+@app.post('/api/auth/reset-password')
+def reset_password(body: ResetPasswordInput, request: Request, response: Response):
     require_request(request)
+    ensure_password(body.password)
     with db() as conn:
-        row = conn.execute("""SELECT a.user_id FROM auth_tokens a JOIN users u ON u.id=a.user_id
-            WHERE a.token_hash=%s AND a.purpose='login' AND a.expires_at>now()
-              AND a.used_at IS NULL AND u.active=true FOR UPDATE OF a""", (digest(body.token),)).fetchone()
+        row=conn.execute("""SELECT a.user_id FROM auth_tokens a JOIN users u ON u.id=a.user_id
+            WHERE a.token_hash=%s AND a.purpose='login'
+            AND a.used_at IS NULL AND a.expires_at>now() AND u.active=true
+            FOR UPDATE OF a""",(digest(body.token),)).fetchone()
         if not row:
-            raise HTTPException(400, 'Lien invalide ou expiré')
-        conn.execute('UPDATE auth_tokens SET used_at=now() WHERE token_hash=%s', (digest(body.token),))
-        set_session(conn, response, row['user_id'])
-    return {'status': 'connected'}
+            raise HTTPException(400,'Lien de réinitialisation invalide ou expiré')
+        conn.execute("UPDATE users SET password_hash=%s WHERE id=%s",
+                     (PASSWORD_HASHER.hash(body.password),row['user_id']))
+        conn.execute("UPDATE auth_tokens SET used_at=now() WHERE token_hash=%s",(digest(body.token),))
+        conn.execute("DELETE FROM sessions WHERE user_id=%s",(row['user_id'],))
+        set_session(conn,response,row['user_id'])
+    return {'status':'connected'}
+
+
+@app.post('/api/auth/change-password')
+def change_password(body: ChangePasswordInput,request:Request,response:Response,user=Depends(current_user)):
+    require_request(request)
+    ensure_password(body.new_password)
+    with db() as conn:
+        row=conn.execute("SELECT password_hash FROM users WHERE id=%s FOR UPDATE",(user['id'],)).fetchone()
+        if not verify_password(row['password_hash'],body.current_password):
+            raise HTTPException(401,'Mot de passe actuel incorrect')
+        conn.execute("UPDATE users SET password_hash=%s WHERE id=%s",
+                     (PASSWORD_HASHER.hash(body.new_password),user['id']))
+        conn.execute("DELETE FROM sessions WHERE user_id=%s",(user['id'],))
+        set_session(conn,response,user['id'])
+    return {'status':'updated'}
 
 
 @app.post('/api/auth/logout')
@@ -312,8 +342,9 @@ def activate(body: ActivationInput, request: Request, response: Response):
             raise HTTPException(422, 'Sélectionnez un pôle autorisé')
         if body.pole_id is not None and body.pole_id not in choices:
             raise HTTPException(422, 'Pôle non autorisé')
-        conn.execute('UPDATE users SET first_name=%s,last_name=%s,active=true WHERE id=%s',
-                     (first, last, row['user_id']))
+        ensure_password(body.password)
+        conn.execute('UPDATE users SET first_name=%s,last_name=%s,active=true,password_hash=%s WHERE id=%s',
+                     (first, last, PASSWORD_HASHER.hash(body.password), row['user_id']))
         if body.pole_id:
             conn.execute('INSERT INTO user_poles(user_id,pole_id,position) VALUES (%s,%s,1)',
                          (row['user_id'], body.pole_id))
@@ -369,21 +400,32 @@ def invite(body: InviteInput, request: Request, user=Depends(admin)):
         if member and member['active']:
             raise HTTPException(409, 'Ce membre possède déjà un compte actif')
         if not member:
-            member = conn.execute("INSERT INTO users(email) VALUES (%s) RETURNING id,active", (email,)).fetchone()
+            member = conn.execute("INSERT INTO users(email) VALUES(%s) RETURNING id,active",(email,)).fetchone()
         conn.execute('DELETE FROM project_access WHERE user_id=%s', (member['id'],))
         for project_id in project_ids:
-            conn.execute('INSERT INTO project_access(user_id,project_id) VALUES (%s,%s)', (member['id'], project_id))
-        conn.execute("DELETE FROM auth_tokens WHERE user_id=%s AND purpose='invite'", (member['id'],))
+            conn.execute('INSERT INTO project_access(user_id,project_id) VALUES(%s,%s)',(member['id'],project_id))
+        conn.execute("DELETE FROM auth_tokens WHERE user_id=%s AND purpose='invite'",(member['id'],))
         secret = secrets.token_urlsafe(40)
-        conn.execute("INSERT INTO auth_tokens(token_hash,user_id,purpose,expires_at) VALUES (%s,%s,'invite',%s)",
-                     (digest(secret), member['id'], now() + timedelta(days=7)))
-        # En cas d'échec SMTP la transaction est annulée ; aucun lien perdu en base.
-        try:
-            mail(email, 'Invitation à rejoindre Orga Alfiya',
-                 f'Vous êtes invité(e) à rejoindre Orga Alfiya. Activez votre compte dans les 7 jours :\n\n{PUBLIC_URL}/#invite={secret}\n\nCe lien est personnel et à usage unique.')
-        except Exception:
-            raise HTTPException(503, 'Envoi impossible : vérifiez la configuration SMTP') from None
-    return {'message': 'Invitation envoyée'}
+        conn.execute("INSERT INTO auth_tokens(token_hash,user_id,purpose,expires_at) VALUES(%s,%s,'invite',%s)",
+                     (digest(secret),member['id'],now()+timedelta(days=7)))
+    return {'message':'Invitation créée (à partager manuellement)','url':f'{PUBLIC_URL}/#invite={secret}'}
+
+
+@app.post('/api/admin/users/{user_id}/reset-link')
+def admin_reset_link(user_id:int,request:Request,user=Depends(admin)):
+    require_request(request)
+    if user_id == user['id']:
+        raise HTTPException(400,'Pour votre propre mot de passe, utilisez la modification dans votre profil ou le terminal du NAS')
+    with db() as conn:
+        target=conn.execute("""SELECT id FROM users WHERE id=%s AND active=true AND role='member'""",
+                            (user_id,)).fetchone()
+        if not target:
+            raise HTTPException(404,'Membre actif introuvable')
+        conn.execute("DELETE FROM auth_tokens WHERE user_id=%s AND purpose='login'",(user_id,))
+        secret=secrets.token_urlsafe(40)
+        conn.execute("""INSERT INTO auth_tokens(token_hash,user_id,purpose,expires_at)
+            VALUES(%s,%s,'login',%s)""",(digest(secret),user_id,now()+timedelta(minutes=30)))
+    return {'url':f'{PUBLIC_URL}/#reset={secret}','message':'Lien de réinitialisation valable 30 minutes'}
 
 
 @app.post('/api/admin/users/{user_id}/access')
