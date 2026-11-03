@@ -253,7 +253,9 @@ def login(body: CredentialsInput, request: Request, response: Response):
             (digest(ip),)).fetchone()['total']
         if attempts_email >= 8 or attempts_ip >= 100:
             raise HTTPException(429,'Trop de tentatives. Réessayez plus tard.')
+        # Transaction distincte : les échecs sont enregistrés même si le mot de passe est faux.
         conn.execute("INSERT INTO login_requests(email,ip_hash) VALUES(%s,%s)",(email,digest(ip)))
+    with db() as conn:
         user=conn.execute("""SELECT id,password_hash FROM users
             WHERE email=%s AND active=true""",(email,)).fetchone()
         if not verify_password(user['password_hash'] if user else None,body.password) or not user or not user['password_hash']:
