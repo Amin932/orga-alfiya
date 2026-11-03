@@ -14,8 +14,22 @@ fi
 if [ ! -f .env ]; then
   echo "ERREUR : fichier .env manquant. Copier .env.example, puis le configurer." >&2; exit 1
 fi
-if grep -Eq 'REMPLACER|admin@example.com|smtp.example.com' .env; then
+if grep -Eq 'REMPLACER|admin@example.com' .env; then
   echo "ERREUR : des exemples ou des secrets factices restent dans .env." >&2; exit 1
+fi
+if ! grep -Eq '^SUPERADMIN_INITIAL_PASSWORD=.{16,}
+  echo "ERREUR : COOKIE_SECURE doit rester à true pour HTTPS." >&2; exit 1
+fi
+if ! docker compose config --quiet; then
+  echo "ERREUR : la configuration Compose contient une erreur." >&2; exit 1
+fi
+if [ ! -f secrets/vapid_private.pem ]; then
+  echo "AVERTISSEMENT : clé VAPID absente, le push sera indisponible."
+fi
+echo "OK : Docker et variables Compose valides (aucune donnée sensible affichée)."
+echo "Attention : DNS, HTTPS, ouverture des ports et SMTP doivent aussi être testés."
+ .env; then
+  echo "ATTENTION : définir un mot de passe initial admin de 16 caractères minimum pour un premier démarrage." >&2
 fi
 if grep -Eq '^COOKIE_SECURE=false' .env; then
   echo "ERREUR : COOKIE_SECURE doit rester à true pour HTTPS." >&2; exit 1
