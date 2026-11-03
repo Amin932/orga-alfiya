@@ -1,4 +1,4 @@
-"""Bloc 7 — tests indépendants du SMTP, PostgreSQL et services push réels."""
+"""Bloc 7 — tests des notifications internes et Web Push sans SMTP."""
 from datetime import date
 import pytest
 from fastapi.testclient import TestClient
@@ -24,10 +24,10 @@ def test_default_notifications_and_invalid_offsets():
         ReminderInput(days_before=[3,3]).valid_days()
     with pytest.raises(Exception):
         ReminderInput(days_before=[4]).valid_days()
-    PreferenceInput(email_enabled=False,push_enabled=True,events={
+    PreferenceInput(push_enabled=True,events={
         event: True for event in EVENT_TYPES}).valid_events()
     with pytest.raises(Exception):
-        PreferenceInput(email_enabled=True,push_enabled=True,events={}).valid_events()
+        PreferenceInput(push_enabled=True,events={}).valid_events()
 
 
 def test_push_provider_allowlist():
@@ -52,7 +52,7 @@ def test_mutations_require_csrf():
     app.dependency_overrides[current_user]=lambda: {"id":2,"role":"member"}
     c=TestClient(app)
     assert c.put("/api/notifications/preferences",json={
-        "email_enabled":False,"push_enabled":False,"events":{t:True for t in EVENT_TYPES}
+        "push_enabled":False,"events":{t:True for t in EVENT_TYPES}
     }).status_code==403
     assert c.post("/api/notifications/read-all",json={}).status_code==403
     assert c.put("/api/cards/1/follow",json={"follow":True}).status_code==403
