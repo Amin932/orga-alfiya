@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState, type FormEvent } from 'react'
-import { ArrowDown, ArrowLeft, ArrowUp, Check, FolderKanban, Mail, Plus, Save, ShieldCheck, Trash2, Users, X } from 'lucide-react'
+import { ArrowDown, ArrowLeft, ArrowUp, Check, FolderKanban, Plus, Save, ShieldCheck, Trash2, Users, X } from 'lucide-react'
 import './admin-workspace.css'
 import AdminTrash from './AdminTrash'
 
@@ -26,6 +26,7 @@ export default function AdminWorkspace({ back }: { back: () => void }) {
   const [poles, setPoles] = useState<number[]>([])
   const [inviteEmail, setInviteEmail] = useState('')
   const [inviteProjects, setInviteProjects] = useState<number[]>([])
+  const [shareLink, setShareLink] = useState('')
   const [newProject, setNewProject] = useState('')
   const [newPole, setNewPole] = useState('')
   const [newPoleProject, setNewPoleProject] = useState('')
@@ -98,11 +99,25 @@ export default function AdminWorkspace({ back }: { back: () => void }) {
   }
 
   async function invite(e: FormEvent) {
-    e.preventDefault()
-    await perform(async () => {
-      await request('/api/admin/invitations', { email: inviteEmail, project_ids: inviteProjects })
-      setInviteEmail(''); setInviteProjects([])
-    })
+    e.preventDefault();setBusy(true);setNotice('');setShareLink('')
+    try {
+      const result=await request<{url:string;message:string}>('/api/admin/invitations',
+        {email:inviteEmail,project_ids:inviteProjects})
+      setShareLink(result.url)
+      setInviteEmail('');setInviteProjects([])
+      await refresh()
+      setNotice('Lien créé. Copiez-le et envoyez-le personnellement au membre (7 jours, usage unique).')
+    } catch(e) {setNotice(e instanceof Error?e.message:'Création du lien impossible')}
+    finally {setBusy(false)}
+  }
+  async function resetLink(id:number){
+    setBusy(true);setNotice('');setShareLink('')
+    try {
+      const result=await request<{url:string}>('/api/admin/users/'+id+'/reset-link',{})
+      setShareLink(result.url)
+      setNotice('Lien de réinitialisation valable 30 minutes : partagez-le directement au membre.')
+    }catch(e){setNotice(e instanceof Error?e.message:'Lien impossible')}
+    finally{setBusy(false)}
   }
 
   return <main className="aw-layout">
@@ -113,7 +128,7 @@ export default function AdminWorkspace({ back }: { back: () => void }) {
     <div className="aw-stats">
       <div><Users size={18}/><strong>{members.filter(m => m.role === 'member').length}</strong><span>Membres</span></div>
       <div><FolderKanban size={18}/><strong>{projects.length}</strong><span>Projets</span></div>
-      <div><Mail size={18}/><strong>{members.filter(m => m.state === 'pending').length}</strong><span>Invitations en attente</span></div>
+      <div><Plus size={18}/><strong>{members.filter(m => m.state === 'pending').length}</strong><span>Invitations en attente</span></div>
     </div>
     {notice && <div className="aw-notice" role="status">{notice}</div>}
     <div className="aw-tabs" role="tablist" aria-label="Navigation administration">
@@ -125,13 +140,22 @@ export default function AdminWorkspace({ back }: { back: () => void }) {
     {tab === 'members' ? <div className="aw-columns">
       <div className="aw-stack">
         <section className="aw-panel"><h2>Inviter un membre</h2>
-          <p>Invitation personnelle par e-mail. Aucun compte public ne peut s'inscrire.</p>
+          <p>Créez un lien personnel à usage unique, puis partagez-le vous-même. Aucun e-mail n'est envoyé par l'application.</p>
           <form onSubmit={e => void invite(e)}>
             <label>E-mail du membre<input type="email" required value={inviteEmail} onChange={e => setInviteEmail(e.target.value)} placeholder="membre@exemple.fr"/></label>
             <strong className="aw-label">Projets accessibles à son inscription</strong>
             {projects.map(p => <label className="aw-check" key={p.id}><input type="checkbox" checked={inviteProjects.includes(p.id)} onChange={e => setInviteProjects(old => e.target.checked ? [...old, p.id] : old.filter(id => id !== p.id))}/>{p.name}</label>)}
-            <button className="aw-primary" disabled={busy || !inviteEmail || inviteProjects.length === 0}><Mail size={16}/> Envoyer l'invitation</button>
+            <button className="aw-primary" disabled={busy || !inviteEmail || inviteProjects.length === 0}><Plus size={16}/> Créer le lien d'invitation</button>
           </form>
+          {shareLink && <div className="aw-section">
+            <h3>Lien personnel à partager</h3>
+            <p>Visible une seule fois : copiez-le maintenant. Toute personne qui le possède peut activer le compte avant son expiration.</p>
+            <input type="text" readOnly aria-label="Lien d'invitation ou de réinitialisation" value={shareLink} onFocus={e=>e.target.select()}/>
+            <button className="aw-secondary" onClick={()=>void navigator.clipboard.writeText(shareLink).then(()=>setNotice('Lien copié.')).catch(()=>setNotice('Sélectionnez le lien pour le copier manuellement.'))}>
+              Copier le lien
+            </button>
+            <button className="aw-secondary" onClick={()=>setShareLink('')}>Masquer le lien</button>
+          </div>}
         </section>
         <section className="aw-panel"><h2>Annuaire</h2>
           <div className="aw-member-list">{members.map(u => <button key={u.id} className={'aw-member ' + (selectedMember === u.id ? 'picked' : '')} onClick={() => chooseMember(u.id)}>
@@ -190,6 +214,14 @@ export default function AdminWorkspace({ back }: { back: () => void }) {
             <button className="aw-secondary" disabled={busy || !selected.active} onClick={() => void perform(() => request(`/api/admin/users/${selected.id}/poles`, {pole_ids: poles}))}><Save size={15}/> Enregistrer l'ordre des pôles</button>
             {selected.state === 'pending' && <small>L'affectation des pôles sera disponible après l'activation du compte.</small>}
           </div>
+          {selected.active && <div className="aw-section">
+            <h3>Accès au compte</h3>
+            <p>En cas d'oubli du mot de passe, générez un lien à envoyer manuellement au membre.</p>
+            <button className="aw-secondary" disabled={busy} onClick={()=>void resetLink(selected.id)}>
+              Générer un lien de réinitialisation
+            </button>
+            {shareLink && <p className="aw-notice">Lien généré : retrouvez-le dans le panneau « Inviter un membre » à gauche.</p>}
+          </div>}
           <div className="aw-section">
             <h3>Statut du compte</h3>
             {selected.active ? <button className="aw-danger" disabled={busy} onClick={() => {
