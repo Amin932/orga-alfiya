@@ -2,11 +2,8 @@
 import json
 import logging
 import os
-import smtplib
-import ssl
 import time
 from datetime import datetime, timedelta, timezone
-from email.message import EmailMessage
 from urllib.parse import urlencode
 from zoneinfo import ZoneInfo
 
@@ -67,23 +64,6 @@ def card_url(conn,card_id):
     return PUBLIC_URL+"/?"+query
 
 
-def smtp_send(to,subject,body):
-    params=[os.getenv(k,"") for k in ("SMTP_HOST","SMTP_USERNAME","SMTP_PASSWORD","SMTP_FROM")]
-    if not all(params): raise RuntimeError("SMTP non configuré")
-    host,user,pwd,sender=params
-    port=int(os.getenv("SMTP_PORT","465"))
-    msg=EmailMessage()
-    msg["From"],msg["To"],msg["Subject"]=sender,to,subject
-    msg.set_content(body)
-    if port==465:
-        with smtplib.SMTP_SSL(host,port,timeout=20,context=ssl.create_default_context()) as s:
-            s.login(user,pwd);s.send_message(msg)
-    elif port==587:
-        with smtplib.SMTP(host,port,timeout=20) as s:
-            s.starttls(context=ssl.create_default_context());s.login(user,pwd);s.send_message(msg)
-    else: raise RuntimeError("Port SMTP non pris en charge")
-
-
 def push_send(user_id, title, message, url):
     from pywebpush import webpush, WebPushException
     key_path=os.getenv("VAPID_PRIVATE_KEY_FILE","")
@@ -140,12 +120,9 @@ def process_deliveries(limit=25):
                         (row["user_id"],row["user_id"],row["card_id"])).fetchone())
         failure=None
         try:
-            if not row["active"] or not access_ok or not prefs["events"].get(row["event_type"],True) or not prefs[row["channel"]+"_enabled"]:
-                raise ValueError("Notifications désactivées ou compte inactif")
-            if row["channel"]=="email":
-                smtp_send(row["email"],"Orga Alfiya — "+row["title"],row["message"]+"\n\nAccéder à Orga Alfiya : "+link)
-            else:
-                push_send(row["user_id"],row["title"],row["message"],link)
+            if row["channel"]!="push" or not row["active"] or not access_ok or not prefs["events"].get(row["event_type"],True) or not prefs["push_enabled"]:
+                raise ValueError("Canal SMTP supprimé, notification désactivée ou compte inactif")
+            push_send(row["user_id"],row["title"],row["message"],link)
         except Exception as exc:
             failure=exc
             LOG.warning("Échec d'envoi notification %s (%s): %s",row["id"],row["channel"],type(exc).__name__)
