@@ -13,7 +13,6 @@ MAX_ITEMS = 50
 
 
 class PreferenceInput(BaseModel):
-    email_enabled: bool
     push_enabled: bool
     events: dict[str, bool] = Field(default_factory=lambda: dict(DEFAULT_EVENTS))
 
@@ -102,13 +101,16 @@ def schema_notifications(db):
             "CREATE INDEX IF NOT EXISTS push_user_idx ON push_subscriptions(user_id)",
         ]:
             conn.execute(sql)
+        # Ne jamais envoyer d'anciens courriels en attente lors d'une migration.
+        conn.execute("""UPDATE notification_deliveries
+            SET status='failed',locked_at=NULL,last_error='SMTP désactivé définitivement'
+            WHERE channel='email' AND status IN ('pending','processing')""")
 
 
 def preference(conn, user_id):
     row = conn.execute("""SELECT email_enabled,push_enabled,events FROM notification_preferences
         WHERE user_id=%s""",(user_id,)).fetchone()
     return {
-        "email_enabled": row["email_enabled"] if row else True,
         "push_enabled": row["push_enabled"] if row else True,
         "events": {**DEFAULT_EVENTS, **(row["events"] if row else {})}
     }
@@ -132,11 +134,9 @@ def notify(conn, user_id, event, title, message, card_id=None, dedupe_key=None, 
         VALUES (%s,%s,%s,%s,%s,%s)
         ON CONFLICT (user_id,dedupe_key) DO NOTHING RETURNING id""",
         (user_id,card_id,event,title[:150],message[:500],dedupe_key)).fetchone()
-    if notification:
-        for channel,enabled in (("email",prefs["email_enabled"]),("push",prefs["push_enabled"])):
-            if enabled:
-                conn.execute("""INSERT INTO notification_deliveries(notification_id,channel)
-                    VALUES (%s,%s)""",(notification["id"],channel))
+    if notification and prefs["push_enabled"]:
+        conn.execute("""INSERT INTO notification_deliveries(notification_id,channel)
+            VALUES (%s,'push')""",(notification["id"],))
     return notification["id"] if notification else None
 
 
@@ -241,18 +241,17 @@ def register_notification_routes(app, db, current_user, require_request):
         require_request(request);body.valid_events()
         from psycopg.types.json import Jsonb
         with db() as conn:
-            conn.execute("""INSERT INTO notification_preferences(user_id,email_enabled,push_enabled,events)
-                VALUES (%s,%s,%s,%s)
-                ON CONFLICT(user_id) DO UPDATE SET email_enabled=EXCLUDED.email_enabled,
+            conn.execute("""INSERT INTO notification_preferences(user_id,push_enabled,events)
+                VALUES (%s,%s,%s)
+                ON CONFLICT(user_id) DO UPDATE SET
                     push_enabled=EXCLUDED.push_enabled,events=EXCLUDED.events""",
-                (user["id"],body.email_enabled,body.push_enabled,Jsonb(body.events)))
-            # Stop pending dispatches on disabled channels, even for past notifications.
-            for channel, enabled in (("email",body.email_enabled),("push",body.push_enabled)):
-                if not enabled:
-                    conn.execute("""UPDATE notification_deliveries SET status='failed',last_error='Désactivé'
-                        WHERE channel=%s AND status='pending'
-                        AND notification_id IN (SELECT id FROM notifications WHERE user_id=%s)""",
-                        (channel,user["id"]))
+                (user["id"],body.push_enabled,Jsonb(body.events)))
+            if not body.push_enabled:
+                conn.execute("""UPDATE notification_deliveries SET status='failed',
+                    last_error='Désactivé par le membre'
+                    WHERE channel='push' AND status='pending'
+                    AND notification_id IN (SELECT id FROM notifications WHERE user_id=%s)""",
+                    (user["id"],))
         return {"status":"updated"}
 
     @app.get("/api/cards/{card_id}/follow")
