@@ -96,3 +96,21 @@ def test_password_login_and_manual_invitation_without_smtp():
             json={"email":"invited-ci@example.test","password":"A-new-private-password-1234"})
         assert member.status_code==200,member.text
         assert client.get('/api/auth/me').json()["user"]["first_name"]=="Aïcha"
+
+
+def test_notification_generates_only_push_and_in_app():
+    """Aucun job e-mail n'est jamais ajouté à la file."""
+    from app.notifications_v7 import notify
+    with TestClient(app):
+        with db() as conn:
+            user=conn.execute("""INSERT INTO users(email,first_name,active,password_hash)
+                VALUES('notifications-ci@example.test','Nadia',true,'test-hash')
+                ON CONFLICT (email) DO UPDATE SET active=true RETURNING id""").fetchone()
+            notification=notify(conn,user['id'],'critical',
+                'Test Orga Alfiya','Notification interne seulement',dedupe_key='ci-no-mail-01')
+            assert notification is not None
+            channels=conn.execute("""SELECT channel FROM notification_deliveries
+                WHERE notification_id=%s""",(notification,)).fetchall()
+            assert [r['channel'] for r in channels]==['push']
+            exists=conn.execute("SELECT id FROM notifications WHERE id=%s",(notification,)).fetchone()
+            assert exists
