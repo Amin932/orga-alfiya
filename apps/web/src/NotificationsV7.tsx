@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { Bell, BellOff, CheckCheck, Mail, Settings2, Smartphone, X } from 'lucide-react'
+import { Bell, BellOff, CheckCheck, Settings2, Smartphone, X } from 'lucide-react'
 import './notifications-v7.css'
 
 type Notification = {
@@ -7,7 +7,7 @@ type Notification = {
   card_id:number|null; project_id:number|null; pole_id:number|null;
   created_at:string; read_at:string|null
 }
-type Prefs = { email_enabled:boolean; push_enabled:boolean; events:Record<string,boolean> }
+type Prefs = { push_enabled:boolean; events:Record<string,boolean> }
 const eventLabels:Record<string,string> = {
   assignment:'Attributions de missions',mention:'Mentions dans les commentaires',
   comment:'Commentaires des cartes suivies',completed:'Cartes terminées',
@@ -141,18 +141,17 @@ export default function NotificationsV7() {
         </div>
       </>:<>
         {prefs ? <div className="nt-preferences">
-          <label><input type="checkbox" checked={prefs.email_enabled} onChange={e=>setPrefs({...prefs,email_enabled:e.target.checked})}/> Recevoir les e-mails</label>
           <label><input type="checkbox" checked={prefs.push_enabled} onChange={e=>setPrefs({...prefs,push_enabled:e.target.checked})}/> Autoriser les notifications push</label>
           <h4>Événements à suivre</h4>
           {Object.entries(eventLabels).map(([key,label])=><label key={key}>
             <input type="checkbox" checked={prefs.events[key]??true} onChange={e=>setPrefs({...prefs,events:{...prefs.events,[key]:e.target.checked}})}/>{label}</label>)}
           <div className="nt-setting-actions">
-            <button disabled={busy} onClick={()=>void savePreferences()}><Mail size={14}/> Enregistrer</button>
+            <button disabled={busy} onClick={()=>void savePreferences()}><Settings2 size={14}/> Enregistrer</button>
             <button disabled={busy||!pushKey} onClick={()=>void enablePush()} title={!pushKey?'Configurer VAPID sur le NAS':'Autoriser cet appareil'}><Smartphone size={14}/> Activer le push sur cet appareil</button>
             <button disabled={busy} onClick={()=>void unsubscribe()}><BellOff size={14}/> Retirer les appareils push</button>
             <button className="nt-back" onClick={()=>setSettings(false)}>Retour aux notifications</button>
           </div>
-          <small>Les alertes dans l'application restent consultables. Les e-mails et le push sont facultatifs. Les push nécessitent HTTPS et un navigateur compatible.</small>
+          <small>Les alertes dans l'application restent consultables. Le push est facultatif. Les push nécessitent HTTPS et un navigateur compatible.</small>
         </div>:<p>Chargement…</p>}
       </>}
     </div>}
