@@ -62,7 +62,7 @@ def test_core_workflow_against_real_postgres():
 
 def test_password_login_and_manual_invitation_without_smtp():
     """Les comptes se créent et se connectent sans envoyer de message SMTP."""
-    with TestClient(app) as client:
+    with TestClient(app,base_url='https://testserver') as client:
         with db() as conn:
             admin=conn.execute("""SELECT id,password_hash,email FROM users
                 WHERE role='superadmin' LIMIT 1""").fetchone()
