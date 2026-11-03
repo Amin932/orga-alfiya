@@ -56,6 +56,7 @@ jobs:
       PYTHONPATH: apps/api
       DATABASE_URL: postgresql://orgatest:test-password-only-in-ci@127.0.0.1:5432/orgatest
       SUPERADMIN_EMAIL: integration-admin@example.test
+      SUPERADMIN_INITIAL_PASSWORD: CI-test-only-bootstrap-password-987654321
       ORGA_PUBLIC_URL: https://orga-alfiya.amvei.synology.me
       COOKIE_SECURE: "true"
     steps:
@@ -77,6 +78,7 @@ jobs:
       POSTGRES_USER: orgatest
       POSTGRES_PASSWORD: ci-password-not-for-production
       SUPERADMIN_EMAIL: integration-admin@example.test
+      SUPERADMIN_INITIAL_PASSWORD: CI-test-only-bootstrap-password-987654321
       ORGA_PUBLIC_URL: https://orga-alfiya.amvei.synology.me
       COOKIE_SECURE: "true"
       ORGA_HTTP_BIND: 127.0.0.1
