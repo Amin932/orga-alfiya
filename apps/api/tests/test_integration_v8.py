@@ -57,3 +57,42 @@ def test_core_workflow_against_real_postgres():
         assert trashed.status_code == 200,trashed.text
         assert client.get(f"/api/poles/{pole}/cards").json()["cards"] == []
         app.dependency_overrides.clear()
+
+
+
+def test_password_login_and_manual_invitation_without_smtp():
+    """Les comptes se créent et se connectent sans envoyer de message SMTP."""
+    with TestClient(app) as client:
+        with db() as conn:
+            admin=conn.execute("""SELECT id,password_hash,email FROM users
+                WHERE role='superadmin' LIMIT 1""").fetchone()
+            assert admin and admin["password_hash"]
+        bad=client.post('/api/auth/login',headers={'X-Orga-Request':'1'},
+            json={"email":admin["email"],"password":"incorrect"})
+        assert bad.status_code==401,bad.text
+        ok=client.post('/api/auth/login',headers={'X-Orga-Request':'1'},
+            json={"email":admin["email"],"password":"CI-test-only-bootstrap-password-987654321"})
+        assert ok.status_code==200,ok.text
+        invite=client.post('/api/admin/invitations',headers={'X-Orga-Request':'1'},
+            json={"email":"invited-ci@example.test","project_ids":[]})
+        assert invite.status_code==201,invite.text
+        url=invite.json()["url"]
+        assert '#invite=' in url
+        token=url.split('#invite=',1)[1]
+        details=client.post('/api/auth/invitation',headers={'X-Orga-Request':'1'},json={"token":token})
+        assert details.status_code==200,details.text
+        assert details.json()["email"]=="invited-ci@example.test"
+        client.post('/api/auth/logout',headers={'X-Orga-Request':'1'},json={})
+        activated=client.post('/api/auth/activate',headers={'X-Orga-Request':'1'},
+            json={"token":token,"first_name":"Aïcha","last_name":"Test",
+                  "password":"A-new-private-password-1234","pole_id":None})
+        assert activated.status_code==200,activated.text
+        again=client.post('/api/auth/activate',headers={'X-Orga-Request':'1'},
+            json={"token":token,"first_name":"Test","last_name":"Again",
+                  "password":"A-new-private-password-1234","pole_id":None})
+        assert again.status_code==400
+        client.post('/api/auth/logout',headers={'X-Orga-Request':'1'},json={})
+        member=client.post('/api/auth/login',headers={'X-Orga-Request':'1'},
+            json={"email":"invited-ci@example.test","password":"A-new-private-password-1234"})
+        assert member.status_code==200,member.text
+        assert client.get('/api/auth/me').json()["user"]["first_name"]=="Aïcha"
