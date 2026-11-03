@@ -6,7 +6,7 @@
 
 - NAS Synology allumé, Docker/Container Manager opérationnel, SSH si installation en ligne de commande.
 - Un accès GitHub à \`Amin932/orga-alfiya\`.
-- Un compte de messagerie SMTP avec autorisation d'envoyer des e-mails de connexion/invitation.
+- Aucun fournisseur de messagerie n'est nécessaire. Les invitations sont transmises manuellement par l'administrateur.
 - Une sauvegarde DSM fonctionnelle, de l'espace disque et un accès internet sortant depuis le NAS.
 - Pour l'accès externe : le DNS de \`orga-alfiya.amvei.synology.me\` doit pointer vers une adresse joignable depuis Internet. Le fait d'avoir une Flybox 5G ne garantit pas une entrée IPv4 publique ou une redirection de port utilisable ; tester le point depuis un téléphone **hors Wi-Fi** et vérifier que l'opérateur ne bloque pas le trafic entrant.
 
@@ -35,7 +35,7 @@ Si le dépôt existe déjà, utiliser \`git pull --ff-only\` **avant la mise à 
 - ORGA_PUBLIC_URL : \`https://orga-alfiya.amvei.synology.me\` (sans slash final).
 - ORGA_HTTP_BIND : \`127.0.0.1\` ; ORGA_HTTP_PORT : \`8092\`.
 - COOKIE_SECURE : \`true\`.
-- SMTP_HOST, SMTP_PORT (465 SSL ou 587 STARTTLS), SMTP_USERNAME, SMTP_PASSWORD et SMTP_FROM : utiliser les paramètres exacts du fournisseur mail ; ne pas inventer de serveur.
+- SUPERADMIN_INITIAL_PASSWORD : définir un mot de passe initial d'au moins 16 caractères (ex. `openssl rand -hex 32`) ; tu pourras le changer depuis l'application, puis retirer cette variable après le premier démarrage.
 - VAPID_CONTACT : une adresse e-mail de contact valide sous la forme \`mailto:...\` (si push activé).
 
 Créer la clé privée VAPID sur le NAS (à ne pas publier) :
@@ -96,14 +96,14 @@ Si la connexion externe ne marche pas mais la connexion locale fonctionne, véri
 
 ## 6 — Recette fonctionnelle avant ouverture
 
-1. Ouvrir le site HTTPS. Demander le lien de connexion à l'adresse SUPERADMIN_EMAIL ; réception SMTP, activation et session conservée au redémarrage du navigateur.
+1. Ouvrir le site HTTPS. Se connecter avec `SUPERADMIN_EMAIL` et `SUPERADMIN_INITIAL_PASSWORD` (aucun e-mail n'est envoyé). Vérifier la session persistante. Changer ensuite le mot de passe depuis le menu du compte.
 2. Créer un projet « BDE Alfiya », puis deux pôles de couleurs différentes.
-3. Inviter **un seul compte de test**, lui donner accès au projet et vérifier qu'il ne peut pas créer de pôle.
+3. Créer une invitation pour **un seul compte de test**, copier le lien affiché (valable 7 jours), le transmettre personnellement, puis activer avec prénom, nom, premier pôle et un mot de passe personnel. Vérifier que le membre ne peut pas créer de pôle.
 4. Se connecter avec ce compte et créer une carte « Test » à partir du modèle officiel sans remplir les autres champs.
 5. Ajouter une date, remplir les rubriques, cocher les checklists, joindre une image et la choisir en couverture.
 6. Vérifier le glisser-déposer sur ordinateur et sur smartphone.
 7. Commenter, mentionner un autre membre, puis vérifier que le bon nom/couleur apparaît.
-8. Attribuer un responsable, suivre la carte, vérifier les notifications internes et un e-mail de test.
+8. Attribuer un responsable, suivre la carte et vérifier les notifications directement dans l'application.
 9. Autoriser le push sur un appareil compatible, vérifier sa réception, puis se déconnecter.
 10. Vérifier le passage en « Terminé », les droits de suppression, la corbeille et la restauration.
 11. S'assurer qu'une personne sans accès au projet **ne peut pas consulter** ses cartes ni ses fichiers, même via une URL directe.
@@ -133,4 +133,18 @@ Les migrations sont lancées par l'API au démarrage. Faire la mise à jour pend
 
 ## État de la mise en service
 
-Les tests GitHub Actions valident la compilation, l'API et PostgreSQL. Cela **ne prouve pas** que le certificat, le reverse proxy, le SMTP, les push ou la Flybox fonctionnent depuis Internet. Cette vérification ne peut être faite qu'après le démarrage sur ton NAS.
+Les tests GitHub Actions valident la compilation, l'API et PostgreSQL. Cela **ne prouve pas** que le certificat, le reverse proxy, le e-mail automatique, les push ou la Flybox fonctionnent depuis Internet. Cette vérification ne peut être faite qu'après le démarrage sur ton NAS.
+
+## Connexions sans e-mail automatique
+
+- Le super-administrateur se connecte avec son identifiant (adresse e-mail) et le mot de passe défini par `SUPERADMIN_INITIAL_PASSWORD` au premier démarrage.
+- Les membres n'ont pas d'inscription libre : l'administrateur génère un lien privé à usage unique (7 jours), le copie et le partage par le moyen de son choix.
+- Lors de l'activation, le membre choisit un mot de passe (12 caractères minimum). Sur les appareils habituels, la session reste mémorisée jusqu'à 90 jours.
+- Pour réinitialiser le mot de passe d'un membre, le super-administrateur génère et partage un lien de 30 minutes depuis son interface.
+- Si le super-administrateur perd son mot de passe, depuis le terminal SSH du NAS :
+
+```sh
+sudo docker compose exec api python -m app.reset_admin_password
+```
+
+- Aucun envoi e-mail, SMTP, ou identifiant Google n'est utilisé par Orga Alfiya. **Ne pas insérer de mot de passe Gmail dans le fichier .env.**
