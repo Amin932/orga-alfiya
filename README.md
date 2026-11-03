@@ -4,9 +4,9 @@ Application d'organisation du BDE Alfiya, hébergée sur NAS Synology, accessibl
 
 ## Fonctionnalités disponibles (blocs 1 à 8)
 
-- Invitation **uniquement par le super-administrateur** ; lien individuel à usage unique valable 7 jours.
+- Invitation **uniquement par le super-administrateur** ; lien individuel à usage unique valable 7 jours, à copier et transmettre manuellement.
 - Le membre renseigne son nom, son prénom et choisit son premier pôle parmi ceux des projets autorisés.
-- Connexion par lien e-mail valable 20 minutes ; session enregistrée 90 jours sur l'appareil.
+- Connexion par identifiant (adresse e-mail) et mot de passe personnel (haché avec Argon2) ; session enregistrée 90 jours sur l'appareil, sans envoi d'e-mail.
 - Déconnexion et révocation immédiate des sessions lors de la désactivation du compte.
 - Administration des projets (création, renommage, description et suppression contrôlée), des pôles (création, couleur, édition et suppression contrôlée) et des invitations.
 - Fiche membre : accès à plusieurs projets, appartenances à plusieurs pôles, ordre réglable ; **le premier pôle définit la couleur permanente du membre** dans l'interface.
@@ -64,7 +64,7 @@ Application d'organisation du BDE Alfiya, hébergée sur NAS Synology, accessibl
 - Rappels activés par défaut J-3, J-1, J0, puis une fois à J+1 en cas de retard. Aucun rappel pour les cartes terminées, sans échéance ou supprimées.
 - Cases de configuration propres à chaque carte pour J-7/J-3/J-1/J0/J+1 ; calcul après 9 heures (Europe/Paris).
 - Préférences personnelles par catégorie et par canal e-mail/push.
-- Notifications via SMTP et push VAPID avec un conteneur dédié "notification-worker", reprise sur échec et dédoublonnage.
+- Notifications dans l'application et push VAPID avec un conteneur dédié "notification-worker", reprise sur échec et dédoublonnage.
 - PWA avec service worker push ; aucun cache local des documents confidentiels.
 
 #### Mise en place des notifications push
@@ -94,9 +94,9 @@ docker compose ps
 docker compose logs --tail=100 notification-worker
 ```
 
-Pour les push, l'utilisateur doit autoriser les notifications ; un navigateur compatible et une origine HTTPS sont requis. Sur iPhone, installer la PWA sur l'écran d'accueil. Les e-mails exigent une configuration SMTP valide. Sans clé VAPID, le centre de notifications peut fonctionner, mais pas le push.
+Pour les push, l'utilisateur doit autoriser les notifications ; un navigateur compatible et une origine HTTPS sont requis. Sur iPhone, installer la PWA sur l'écran d'accueil. Les notifications par e-mail sont désactivées. Sans clé VAPID, le centre de notifications fonctionne, mais pas le push.
 
-**Sécurité :** ne pas exposer ce service aux membres avant tests réels de PostgreSQL, du SMTP, des push et des sauvegardes.
+**Sécurité :** ne pas exposer ce service aux membres avant tests réels de PostgreSQL, du envoi d'e-mails, des push et des sauvegardes.
 
 ## Bloc 8 — Préparation de la mise en service Synology
 
@@ -114,10 +114,10 @@ Pour les push, l'utilisateur doit autoriser les notifications ; un navigateur co
 ## Configuration sur Synology
 
 1. Cloner `https://github.com/Amin932/orga-alfiya.git` dans `/volume1/docker/orga-alfiya`.
-2. Copier `.env.example` vers `.env`, remplacer `POSTGRES_PASSWORD` avec un mot de passe aléatoire robuste (sans caractères spéciaux d'URL non encodés), `SUPERADMIN_EMAIL` par **ton adresse e-mail** et configurer `SMTP_HOST`, `SMTP_PORT`, `SMTP_USERNAME`, `SMTP_PASSWORD`, `SMTP_FROM` avec les paramètres de ton hébergeur mail. Ne jamais publier `.env`.
+2. Copier `.env.example` vers `.env`, remplacer `POSTGRES_PASSWORD` avec un mot de passe aléatoire robuste (sans caractères spéciaux d'URL non encodés), `SUPERADMIN_EMAIL` par **ton adresse e-mail** et définir `SUPERADMIN_INITIAL_PASSWORD` (16 caractères minimum) pour la première connexion de l'administrateur. Aucun compte SMTP n'est nécessaire. Ne jamais publier `.env`.
 3. Vérifier `ORGA_PUBLIC_URL` : c'est l'origine exacte utilisée dans le navigateur. Pour la mise en service, configurer le reverse proxy Synology en HTTPS (source `orga-alfiya.amvei.synology.me:443` vers `127.0.0.1:8092`) et un certificat valide avant de tester l'authentification. Ne pas exposer PostgreSQL ni l'API directement.
 4. Exécuter `docker compose config` puis `docker compose up -d --build` ; tester `docker compose ps` et `curl http://127.0.0.1:8092/api/health`.
-5. Sur l'URL HTTPS, saisir l'adresse `SUPERADMIN_EMAIL` et demander un lien de connexion. Le super-administrateur est créé lors du premier démarrage. En recevant le lien, accéder à l'administration, créer un projet et ses pôles, puis envoyer les invitations.
+5. Sur l'URL HTTPS, se connecter avec `SUPERADMIN_EMAIL` et le mot de passe initial défini dans `.env`. Le super-administrateur est créé lors du premier démarrage. Créer un projet et ses pôles, puis générer des liens d'invitation personnels à partager manuellement.
 
 **Sécurité :** par défaut, les sessions nécessitent HTTPS (`COOKIE_SECURE=true`). Les requêtes de modification requièrent un en-tête spécifique et une origine autorisée ; les liens d'invitation ne sont pas enregistrés dans les journaux du proxy (jeton dans le fragment d'URL). Ne pas configurer `COOKIE_SECURE=false` pour un site exposé : ce mode ne convient qu'à un essai strictement local et doit aussi être explicitement autorisé avec `ALLOW_INSECURE_LOCAL=yes`.
 
@@ -125,11 +125,17 @@ Le domaine visé peut nécessiter une configuration réseau complémentaire selo
 
 ## Vérifications automatiques
 
-À chaque commit, GitHub Actions est configuré pour effectuer un build TypeScript/React et des tests unitaires de protections de l'API (`.github/workflows/verify.yml`). Un lancement complet avec PostgreSQL et un service SMTP réel reste indispensable avant ouverture publique.
+À chaque commit, GitHub Actions est configuré pour effectuer un build TypeScript/React et des tests unitaires de protections de l'API (`.github/workflows/verify.yml`). Les tests réels du déploiement sur NAS et des notifications push restent indispensables avant ouverture publique.
 
 ## À compléter aux prochains blocs
 
 - Historique et commentaires enrichis, amélioration de l'ergonomie et tests d'intégration réels.
 - Prévoir une analyse antivirus des pièces jointes avant l'ouverture aux membres.
-- Tests complets sur le NAS : Docker, PostgreSQL, SMTP, push et sauvegardes.
+- Tests complets sur le NAS : Docker, PostgreSQL, push et sauvegardes.
 - Tests d'intégration et revue de sécurité avant ouverture aux 25 membres.
+
+### Modification : aucun envoi d'e-mail
+
+Les invitations sont générées dans l'interface d'administration sous forme de liens privés valables 7 jours, à transmettre manuellement. Chaque membre choisit son mot de passe à l'activation ; les sessions restent mémorisées pendant 90 jours. L'application propose des notifications internes et push uniquement, sans SMTP ni connexion Gmail.
+
+La première installation nécessite un `SUPERADMIN_INITIAL_PASSWORD` local dans `.env`. Après le premier démarrage, il est conseillé de changer son mot de passe depuis le profil et de vider la variable d'initialisation dans le fichier local. Pour récupérer un accès super-admin sans courrier : `sudo docker compose exec api python -m app.reset_admin_password`.
