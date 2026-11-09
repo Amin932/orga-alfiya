@@ -66,3 +66,11 @@
 /* Sur ecran tactile, les cartes s'ouvrent au toucher sans glisser-deposer. */
 .kb-sortable.kb-static,.kb-sortable.kb-static:active{cursor:default;touch-action:auto}
 .kb-static .kb-card-main{padding-left:12px}
+
+/* Transmission entre pôles, lisible sur mobile comme sur ordinateur. */
+.kb-handoff,.kb-handoff-link{border:1px solid #e7d9cb;background:#faf5ee;border-radius:12px;margin-top:18px;padding:15px;display:grid;gap:10px}
+.kb-handoff p{font-size:12px;color:#766357;line-height:1.55;margin:0}
+.kb-handoff .primary-button{display:flex;align-items:center;justify-content:center;gap:9px}
+.kb-handoff-link strong{font-size:13px;color:#6d5143}
+.kb-handoff-link a{display:flex;align-items:center;gap:6px;font-size:12px;color:#a35c45;text-decoration:underline}
+.kb-handoff-success{margin-top:12px;padding:10px;border-radius:8px;font-size:12px;background:#edf7ef;color:#34684a}
