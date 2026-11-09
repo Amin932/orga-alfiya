@@ -354,7 +354,7 @@ export default function KanbanBoard({ poleId, projectId, viewer, isCommunication
             <ArrowRight size={16}/> Envoyer au pôle communication
           </button>
         </div>}
-        {handoffNotice && <p className="kb-handoff-success" role="status">{handoffNotice}</p>
+        {handoffNotice && <p className="kb-handoff-success" role="status">{handoffNotice}</p>}
       </section></div>}
   </div>
 }
