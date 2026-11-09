@@ -100,7 +100,25 @@ def schema_collaboration(db):
             conn.execute(statement)
 
 
+# Any genuine work on a newly created mission moves it into "En cours".
+# Administrative actions (handoff, creation, deletion, restoration, sorting) do not.
+WORK_STARTED_ACTIONS = frozenset({
+    "card_updated", "assignees_changed", "template_updated",
+    "checklist_created", "checklist_renamed", "checklist_deleted",
+    "checklist_item_added", "checklist_item_updated",
+    "checklist_checked", "checklist_item_deleted",
+    "comment_created", "comment_updated", "comment_deleted",
+    "file_added", "file_deleted", "cover_changed",
+})
+
+
 def record_activity(conn, card_id, actor_id, action, details=None):
+    if action in WORK_STARTED_ACTIONS:
+        conn.execute("""UPDATE cards AS c SET status='progress', updated_at=now(),
+            position=(SELECT COALESCE(MAX(other.position), -1)+1
+                      FROM cards other WHERE other.pole_id=c.pole_id
+                        AND other.status='progress' AND other.deleted_at IS NULL)
+            WHERE c.id=%s AND c.status='todo' AND c.deleted_at IS NULL""", (card_id,))
     conn.execute("""INSERT INTO card_activity(card_id,actor_id,action,details)
         VALUES (%s,%s,%s,%s)""", (card_id, actor_id, action, Jsonb(details or {})))
 
