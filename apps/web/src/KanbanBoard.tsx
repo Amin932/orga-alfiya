@@ -68,12 +68,12 @@ function SortableCard({ card, onOpen }: { card: Card; onOpen: (card: Card) => vo
   </div>
 }
 
-function Column({ status, cards, filters, changeFilter, onOpen, onAdd } : {
+function Column({ status, cards, filters, changeFilter, onOpen, onAdd, touchMode } : {
   status: typeof statuses[number]; cards: Card[]; filters: Filter;
   changeFilter: (key: keyof Filter, value: string) => void;
-  onOpen: (card: Card) => void; onAdd: () => void
+  onOpen: (card: Card) => void; onAdd: () => void; touchMode: boolean
 }) {
-  const { setNodeRef, isOver } = useDroppable({ id: 'col-' + status.id })
+  const { setNodeRef, isOver } = useDroppable({ id: 'col-' + status.id, disabled: touchMode })
   return <section ref={setNodeRef} className={'kb-column' + (isOver ? ' kb-over' : '')} aria-label={status.name}>
     <div className="kb-column-head"><span className="kb-status-dot" style={{ background: status.color }}/><strong>{status.name}</strong><span className="kb-count">{cards.length}</span></div>
     <div className="kb-filter-row"><Search size={14}/><input type="search" aria-label={'Filtrer ' + status.name + ' par titre'} placeholder="Filtrer par titre" value={filters.q} onChange={e => changeFilter('q', e.target.value)}/></div>
@@ -89,7 +89,9 @@ function Column({ status, cards, filters, changeFilter, onOpen, onAdd } : {
       </select></label>
     </details>
     <SortableContext id={'items-' + status.id} items={cards.map(c => 'card-' + c.id)} strategy={verticalListSortingStrategy}>
-      <div className="kb-column-items">{cards.map(card => <SortableCard key={card.id} card={card} onOpen={onOpen}/>)}
+      <div className="kb-column-items">{cards.map(card => touchMode
+        ? <div key={card.id} className="kb-sortable kb-static"><CardFace card={card} onClick={() => onOpen(card)}/></div>
+        : <SortableCard key={card.id} card={card} onOpen={onOpen}/>)}
         {!cards.length && <p className="kb-empty">Aucune carte visible</p>}
       </div>
     </SortableContext>
@@ -110,6 +112,13 @@ export default function KanbanBoard({ poleId, projectId, viewer }: Props) {
   const [templates, setTemplates] = useState<LibraryTemplate[]>([])
   const [busy, setBusy] = useState(false)
   const [dragId, setDragId] = useState<number | null>(null)
+  const [touchMode, setTouchMode] = useState(() => window.matchMedia('(pointer: coarse)').matches)
+  useEffect(() => {
+    const media = window.matchMedia('(pointer: coarse)')
+    const update = () => { setTouchMode(media.matches); setDragId(null) }
+    media.addEventListener('change', update)
+    return () => media.removeEventListener('change', update)
+  }, [])
   const [filters, setFilters] = useState<Record<Status, Filter>>({ todo: emptyFilter(), progress: emptyFilter(), done: emptyFilter() })
 
   useEffect(() => { void listTemplates().then(setTemplates).catch(() => setError('Bibliothèque de modèles indisponible')) }, [])
@@ -190,6 +199,18 @@ export default function KanbanBoard({ poleId, projectId, viewer }: Props) {
     try { await api('/api/cards/' + source.id + '/move', 'POST', { status: targetStatus, before_id: beforeId }); await load() }
     catch (e) { setCards(original); setError(e instanceof Error ? e.message : 'Déplacement impossible') }
   }
+  async function changeStatus(status: Status) {
+    if (!opened || opened.status === status || busy) return
+    const cardId = opened.id
+    setBusy(true); setError('')
+    try {
+      await api('/api/cards/' + cardId + '/move', 'POST', { status, before_id: null })
+      const latest = await load()
+      setOpened(previous => previous && previous.id === cardId
+        ? latest.find(c => c.id === cardId) ?? null : previous)
+    } catch (e) { setError(e instanceof Error ? e.message : 'Changement de statut impossible') }
+    finally { setBusy(false) }
+  }
   function editFilter(status: Status, key: keyof Filter, value: string) {
     setFilters(previous => ({ ...previous, [status]: { ...previous[status], [key]: value } }))
   }
@@ -248,13 +269,15 @@ export default function KanbanBoard({ poleId, projectId, viewer }: Props) {
   return <div className="kb-root">
     {error && <p className="kb-error" role="alert">{error} <button onClick={() => setError('')} aria-label="Masquer">×</button></p>}
     {loading ? <p className="kb-loading">Chargement des cartes…</p> :
-      <DndContext sensors={sensors} collisionDetection={closestCorners} onDragStart={startDrag} onDragEnd={endDrag} onDragCancel={() => setDragId(null)}>
+      <DndContext sensors={touchMode ? [] : sensors} collisionDetection={closestCorners} onDragStart={startDrag} onDragEnd={endDrag} onDragCancel={() => setDragId(null)}>
         <div className="kb-grid">{statuses.map(s =>
           <Column key={s.id} status={s} cards={visible[s.id]} filters={filters[s.id]}
-            changeFilter={(key,value) => editFilter(s.id,key,value)} onOpen={openCard} onAdd={() => { setCreateFor(s.id); setNewTitle(''); setNewTemplate('free') }}/>)}</div>
+            changeFilter={(key,value) => editFilter(s.id,key,value)} onOpen={openCard} touchMode={touchMode} onAdd={() => { setCreateFor(s.id); setNewTitle(''); setNewTemplate('free') }}/>)}</div>
         <DragOverlay>{active ? <div className="kb-drag-overlay"><CardFace card={active} dragging /></div> : null}</DragOverlay>
       </DndContext>}
-    <p className="kb-hint">Déplacez les cartes avec la poignée <GripVertical size={14}/> (appui prolongé sur téléphone). Les filtres masquent uniquement l'affichage.</p>
+    <p className="kb-hint">{touchMode
+      ? 'Pour déplacer une carte, ouvrez-la puis choisissez son statut. Les filtres masquent uniquement l’affichage.'
+      : <>Déplacez les cartes avec la poignée <GripVertical size={14}/>. Les filtres masquent uniquement l’affichage.</>}</p>
     {createFor && <div className="overlay" role="presentation" onClick={() => setCreateFor(null)}>
       <section className="detail-modal kb-modal" role="dialog" aria-modal="true" aria-label="Nouvelle carte" onClick={e => e.stopPropagation()}>
         <div className="modal-top"><strong>Créer une carte</strong><button className="icon-button" onClick={() => setCreateFor(null)} aria-label="Fermer"><X size={19}/></button></div>
@@ -271,6 +294,11 @@ export default function KanbanBoard({ poleId, projectId, viewer }: Props) {
       <section className="detail-modal kb-modal kb-detail" role="dialog" aria-modal="true" aria-label={opened.title} onClick={e => e.stopPropagation()}>
         <div className="modal-top"><span className="kb-tag">{opened.template_id ? (templates.find(t => t.id === opened.template_id)?.name || 'Carte avec modèle') : 'Carte libre'}</span><button className="icon-button" onClick={() => setOpened(null)} aria-label="Fermer"><X size={20}/></button></div>
         <form className="kb-form" onSubmit={saveCard}>
+          {touchMode && <label>Statut de la mission
+            <select value={opened.status} disabled={busy} onChange={e => void changeStatus(e.target.value as Status)}>
+              {statuses.map(s => <option key={s.id} value={s.id}>{s.name}</option>)}
+            </select>
+          </label>}
           <label>Titre<input required maxLength={180} value={draft.title} onChange={e => setDraft(d => ({ ...d, title: e.target.value }))}/></label>
           <label>Description<textarea rows={5} maxLength={20000} placeholder="À compléter au fur et à mesure…" value={draft.description} onChange={e => setDraft(d => ({ ...d, description: e.target.value }))}/></label>
           <div className="kb-date-range"><label>Début<input type="date" value={draft.start_date} onChange={e => setDraft(d => ({ ...d, start_date: e.target.value }))}/></label>
