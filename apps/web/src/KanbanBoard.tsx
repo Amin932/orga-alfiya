@@ -20,7 +20,7 @@ type Card = {
   start_date: string | null; due_date: string | null; template_key: Template; template_id: number | null; cover_attachment_id: number | null;
   created_by: number; author_first_name?: string; author_last_name?: string;
   source_card_id: number | null; source_pole_id: number | null; source_pole_name: string | null;
-  sent_card_id: number | null; sent_pole_id: number | null;
+  sent_card_id: number | null; sent_pole_id: number | null; sent_deleted_at: string | null;
   assignees: Member[];
 }
 type Filter = { q: string; dateField: 'start_date' | 'due_date'; from: string; to: string; sort: 'manual' | 'az' | 'start' | 'due' }
@@ -345,7 +345,8 @@ export default function KanbanBoard({ poleId, projectId, viewer, isCommunication
         </div>}
         {!opened.source_card_id && opened.sent_card_id && <div className="kb-handoff-link">
           <strong>Mission déjà transmise au pôle Communication.</strong>
-          {opened.sent_pole_id && <a href={`/?project=${projectId}&pole=${opened.sent_pole_id}&card=${opened.sent_card_id}`}>Ouvrir la carte Communication <ArrowRight size={15}/></a>}
+          {opened.sent_deleted_at && <span>La fiche Communication se trouve dans la corbeille.</span>}
+          {opened.sent_pole_id && !opened.sent_deleted_at && <a href={`/?project=${projectId}&pole=${opened.sent_pole_id}&card=${opened.sent_card_id}`}>Ouvrir la carte Communication <ArrowRight size={15}/></a>}
         </div>}
         {!isCommunicationPole && !opened.source_card_id && !opened.sent_card_id && hasCommunicationPole && <div className="kb-handoff">
           <p>Une fois la préparation terminée, envoyez cette mission au pôle Communication. Elle sera classée « Terminé » ici et une copie démarrera en « À faire » chez eux.</p>
