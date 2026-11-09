@@ -62,3 +62,7 @@
 .kb-sortable{cursor:grab;touch-action:manipulation}
 .kb-sortable:active{cursor:grabbing}
 .kb-grab{pointer-events:none;touch-action:inherit}
+
+/* Sur ecran tactile, les cartes s'ouvrent au toucher sans glisser-deposer. */
+.kb-sortable.kb-static,.kb-sortable.kb-static:active{cursor:default;touch-action:auto}
+.kb-static .kb-card-main{padding-left:12px}
