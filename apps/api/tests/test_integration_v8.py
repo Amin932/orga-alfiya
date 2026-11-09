@@ -114,3 +114,96 @@ def test_notification_generates_only_push_and_in_app():
             assert [r['channel'] for r in channels]==['push']
             exists=conn.execute("SELECT id FROM notifications WHERE id=%s",(notification,)).fetchone()
             assert exists
+
+
+def test_communication_handoff_pipeline():
+    """A mission starts to-do, work advances it, then Communication gets its own task."""
+    with TestClient(app) as client:
+        with db() as conn:
+            project = conn.execute("INSERT INTO projects(name) VALUES ('Passage communication CI') RETURNING id").fetchone()["id"]
+            other_project = conn.execute("INSERT INTO projects(name) VALUES ('Projet inaccessible CI') RETURNING id").fetchone()["id"]
+            origin = conn.execute("""INSERT INTO poles(project_id,name,color)
+                VALUES (%s,'Organisation','#B57460') RETURNING id""", (project,)).fetchone()["id"]
+            communication = conn.execute("""INSERT INTO poles(project_id,name,color)
+                VALUES (%s,'Pôle Communication','#967353') RETURNING id""", (project,)).fetchone()["id"]
+            outsider_pole = conn.execute("""INSERT INTO poles(project_id,name,color)
+                VALUES (%s,'Logistique','#A37760') RETURNING id""", (other_project,)).fetchone()["id"]
+            author = conn.execute("""INSERT INTO users(email,first_name,active)
+                VALUES ('handoff-author-ci@example.test','Camille',true) RETURNING id""").fetchone()["id"]
+            communicator = conn.execute("""INSERT INTO users(email,first_name,active)
+                VALUES ('handoff-com-ci@example.test','Samira',true) RETURNING id""").fetchone()["id"]
+            outsider = conn.execute("""INSERT INTO users(email,first_name,active)
+                VALUES ('handoff-outsider-ci@example.test','Noé',true) RETURNING id""").fetchone()["id"]
+            for uid, pid in ((author,project),(communicator,project),(outsider,other_project)):
+                conn.execute("INSERT INTO project_access(user_id,project_id) VALUES (%s,%s)", (uid,pid))
+            conn.execute("INSERT INTO user_poles(user_id,pole_id,position) VALUES (%s,%s,0)",
+                         (communicator,communication))
+        headers={"X-Orga-Request":"1"}
+        app.dependency_overrides[current_user]=lambda: {"id":author,"role":"member","first_name":"Camille"}
+        try:
+            created=client.post(f"/api/poles/{origin}/cards",headers=headers,
+                json={"title":"Conférence et visuel","status":"done","template_key":"speaker"})
+            assert created.status_code==201,created.text
+            source_id=created.json()["id"]
+            assert created.json()["status"]=="todo"
+            assert client.get(f"/api/poles/{origin}/cards").json()["cards"][0]["status"]=="todo"
+            edit=client.patch(f"/api/cards/{source_id}/template-values",headers=headers,
+                json={"values":{"budget":"130 EUR"}})
+            assert edit.status_code==200,edit.text
+            assert client.get(f"/api/poles/{origin}/cards").json()["cards"][0]["status"]=="progress"
+            missing_access=client.post(f"/api/cards/{source_id}/send-to-communication",
+                headers=headers,json={})
+            assert missing_access.status_code==201,missing_access.text
+            destination_id=missing_access.json()["communication_card_id"]
+            assert missing_access.json()["communication_pole_id"]==communication
+            assert client.get(f"/api/poles/{origin}/cards").json()["cards"][0]["status"]=="done"
+            communication_cards=client.get(f"/api/poles/{communication}/cards").json()["cards"]
+            assert len(communication_cards)==1
+            assert communication_cards[0]["id"]==destination_id
+            assert communication_cards[0]["status"]=="todo"
+            assert communication_cards[0]["source_card_id"]==source_id
+            assert communication_cards[0]["source_pole_id"]==origin
+            source_content=client.get(f"/api/cards/{source_id}/template-content").json()
+            new_content=client.get(f"/api/cards/{destination_id}/template-content").json()
+            assert new_content["values"]==source_content["values"]
+            assert new_content["fields"]==source_content["fields"]
+            assert len(new_content["checklists"])==1
+            assert len(new_content["checklists"][0]["items"])==4
+            assert not any(item["done"] for item in new_content["checklists"][0]["items"])
+            again=client.post(f"/api/cards/{source_id}/send-to-communication",headers=headers,json={})
+            assert again.status_code==409
+            cannot_reopen=client.post(f"/api/cards/{source_id}/move",headers=headers,
+                json={"status":"todo","before_id":None})
+            assert cannot_reopen.status_code==409
+            with db() as conn:
+                notification=conn.execute("""SELECT card_id,event_type FROM notifications
+                    WHERE user_id=%s AND event_type='handoff' ORDER BY id DESC LIMIT 1""",
+                    (communicator,)).fetchone()
+                assert notification and notification["card_id"]==destination_id
+
+            # A communication member starts work by ticking a task, then finishes it.
+            app.dependency_overrides[current_user]=lambda: {"id":communicator,"role":"member","first_name":"Samira"}
+            item_id=new_content["checklists"][0]["items"][0]["id"]
+            tick=client.patch(f"/api/cards/{destination_id}/checklists/{new_content['checklists'][0]['id']}/items/{item_id}/done",
+                headers=headers,json={"done":True})
+            assert tick.status_code==200,tick.text
+            assert client.get(f"/api/poles/{communication}/cards").json()["cards"][0]["status"]=="progress"
+            done=client.post(f"/api/cards/{destination_id}/move",headers=headers,
+                json={"status":"done","before_id":None})
+            assert done.status_code==200,done.text
+            assert client.get(f"/api/poles/{communication}/cards").json()["cards"][0]["status"]=="done"
+            cannot_send_again=client.post(f"/api/cards/{destination_id}/send-to-communication",
+                headers=headers,json={})
+            assert cannot_send_again.status_code==422
+
+            app.dependency_overrides[current_user]=lambda: {"id":outsider,"role":"member","first_name":"Noé"}
+            denied=client.post(f"/api/cards/{source_id}/send-to-communication",headers=headers,json={})
+            assert denied.status_code==404
+            empty=client.post(f"/api/poles/{outsider_pole}/cards",headers=headers,
+                json={"title":"Autre projet"})
+            assert empty.status_code==201
+            no_target=client.post(f"/api/cards/{empty.json()['id']}/send-to-communication",
+                headers=headers,json={})
+            assert no_target.status_code==422
+        finally:
+            app.dependency_overrides.clear()
