@@ -139,7 +139,7 @@ def register_card_routes(app, db, current_user, admin, require_request):
             cards = conn.execute("""SELECT c.id,c.pole_id,c.title,c.description,c.template_key,c.template_id,c.cover_attachment_id,
                 c.status,c.position,c.start_date,c.due_date,c.created_at,c.updated_at,c.source_card_id,
                 origin.pole_id AS source_pole_id, origin_pole.name AS source_pole_name,
-                sent.id AS sent_card_id, sent.pole_id AS sent_pole_id,
+                sent.id AS sent_card_id, sent.pole_id AS sent_pole_id, sent.deleted_at AS sent_deleted_at,
                 c.created_by,u.first_name AS author_first_name,u.last_name AS author_last_name
                 FROM cards c JOIN users u ON u.id=c.created_by
                 LEFT JOIN cards origin ON origin.id=c.source_card_id
