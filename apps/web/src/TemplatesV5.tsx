@@ -114,7 +114,7 @@ export function TemplateLibrary({ viewer, onClose }: {viewer: {id: number; role:
   </section>
 }
 
-export function CardTemplateContent({ cardId }: {cardId: number}) {
+export function CardTemplateContent({ cardId, onChanged }: {cardId: number; onChanged?: () => void}) {
   const [content, setContent] = useState<CardContent | null>(null)
   const [values, setValues] = useState<Record<string,string>>({})
   const [error, setError] = useState('')
@@ -134,7 +134,7 @@ export function CardTemplateContent({ cardId }: {cardId: number}) {
 
   async function run(action: () => Promise<unknown>, preserve = true) {
     setBusy(true); setError(''); setNotice('')
-    try {await action(); await load(preserve); setNotice('Modifications enregistrées.')}
+    try {await action(); await load(preserve); onChanged?.(); setNotice('Modifications enregistrées.')}
     catch(e){setError(e instanceof Error ? e.message : 'Modification impossible')}
     finally {setBusy(false)}
   }
