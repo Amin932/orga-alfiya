@@ -147,6 +147,20 @@ def test_communication_handoff_pipeline():
             source_id=created.json()["id"]
             assert created.json()["status"]=="todo"
             assert client.get(f"/api/poles/{origin}/cards").json()["cards"][0]["status"]=="todo"
+            preparation=client.get(f"/api/cards/{source_id}/template-content").json()
+            preparation_items=[i["text"] for g in preparation["checklists"]
+                               if g["title"]=="Préparation avant le jour J" for i in g["items"]]
+            assert preparation_items==[
+                "Description de la carte complétée",
+                "Ajouter les mails des membres à l'événement dans Google Agenda une fois la date validée",
+            ]
+            bad_link=client.post(f"/api/cards/{source_id}/links",headers=headers,
+                json={"label":"Lien suspect","url":"javascript:alert(1)"})
+            assert bad_link.status_code==422,bad_link.text
+            zoom_link=client.post(f"/api/cards/{source_id}/links",headers=headers,
+                json={"label":"Réunion Zoom","url":"https://zoom.us/j/123456789"})
+            assert zoom_link.status_code==201,zoom_link.text
+            assert client.get(f"/api/cards/{source_id}/collaboration").json()["links"][0]["label"]=="Réunion Zoom"
             edit=client.patch(f"/api/cards/{source_id}/template-values",headers=headers,
                 json={"values":{"budget":"130 EUR"}})
             assert edit.status_code==200,edit.text
@@ -168,7 +182,14 @@ def test_communication_handoff_pipeline():
             assert new_content["values"]==source_content["values"]
             assert new_content["fields"]==source_content["fields"]
             assert len(new_content["checklists"])==1
-            assert len(new_content["checklists"][0]["items"])==4
+            assert len(new_content["checklists"][0]["items"])==5
+            assert [i["text"] for i in new_content["checklists"][0]["items"]]==[
+                "Visuel de communication terminé","Eventbrite créé","Eventbrite publié",
+                "Mail programmé","Liste des participants du BDE et répartition des rôles prêtes"
+            ]
+            copied_links=client.get(f"/api/cards/{destination_id}/collaboration").json()["links"]
+            assert len(copied_links)==1
+            assert copied_links[0]["url"]=="https://zoom.us/j/123456789"
             assert not any(item["done"] for item in new_content["checklists"][0]["items"])
             again=client.post(f"/api/cards/{source_id}/send-to-communication",headers=headers,json={})
             assert again.status_code==409
@@ -188,6 +209,10 @@ def test_communication_handoff_pipeline():
                 headers=headers,json={"done":True})
             assert tick.status_code==200,tick.text
             assert client.get(f"/api/poles/{communication}/cards").json()["cards"][0]["status"]=="progress"
+            eventbrite=client.post(f"/api/cards/{destination_id}/links",headers=headers,
+                json={"label":"Réservation Eventbrite","url":"https://www.eventbrite.com/e/test-123"})
+            assert eventbrite.status_code==201,eventbrite.text
+            assert len(client.get(f"/api/cards/{destination_id}/collaboration").json()["links"])==2
             done=client.post(f"/api/cards/{destination_id}/move",headers=headers,
                 json={"status":"done","before_id":None})
             assert done.status_code==200,done.text
@@ -199,6 +224,11 @@ def test_communication_handoff_pipeline():
             app.dependency_overrides[current_user]=lambda: {"id":outsider,"role":"member","first_name":"Noé"}
             denied=client.post(f"/api/cards/{source_id}/send-to-communication",headers=headers,json={})
             assert denied.status_code==404
+            denied_link=client.get(f"/api/cards/{destination_id}/collaboration")
+            assert denied_link.status_code==404
+            denied_add=client.post(f"/api/cards/{destination_id}/links",headers=headers,
+                json={"label":"Intrus","url":"https://example.com"})
+            assert denied_add.status_code==404
             empty=client.post(f"/api/poles/{outsider_pole}/cards",headers=headers,
                 json={"title":"Autre projet"})
             assert empty.status_code==201
