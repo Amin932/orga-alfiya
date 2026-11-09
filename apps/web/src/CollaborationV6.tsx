@@ -1,12 +1,13 @@
 import { useCallback, useEffect, useState, type FormEvent, type ReactNode } from 'react'
-import { AtSign, Clock3, FileText, ImagePlus, MessageCircle, Paperclip, Save, Trash2, Upload, X } from 'lucide-react'
+import { AtSign, Clock3, ExternalLink, FileText, ImagePlus, Link2, MessageCircle, Paperclip, Plus, Save, Trash2, Upload, X } from 'lucide-react'
 import './collaboration.css'
 
 type Author = { first_name: string; last_name: string; color: string | null }
 type Comment = Author & { id: number; body: string; author_id: number; created_at: string; updated_at: string }
 type Attachment = { id: number; file_name: string; mime_type: string; size_bytes: number; is_cover: boolean; uploaded_by: number }
+type CardLink = { id: number; label: string; url: string; created_by: number; created_at: string }
 type Activity = Author & { id: number; action: string; details: Record<string, unknown>; created_at: string }
-type Collaboration = { comments: Comment[]; files: Attachment[]; activity: Activity[] }
+type Collaboration = { comments: Comment[]; files: Attachment[]; links: CardLink[]; activity: Activity[] }
 type MentionUser = { id: number; first_name: string; last_name: string; color: string | null }
 type MentionPole = { id: number; name: string; color: string }
 type Mentions = { users: MentionUser[]; poles: MentionPole[] }
@@ -52,6 +53,7 @@ const actionLabels: Record<string,string> = {
   checklist_deleted:'a supprimé une checklist',checklist_item_added:'a ajouté une tâche',
   checklist_item_deleted:'a supprimé une tâche',checklist_item_updated:'a modifié une tâche',
   template_updated:'a rempli les informations du modèle',
+  link_added:'a ajouté un lien',link_deleted:'a supprimé un lien',
 }
 
 export default function CollaborationV6({cardId,projectId,viewer,onChanged}: Props) {
@@ -64,6 +66,8 @@ export default function CollaborationV6({cardId,projectId,viewer,onChanged}: Pro
   const [error,setError] = useState('')
   const [busy,setBusy] = useState(false)
   const [fileBusy,setFileBusy] = useState(false)
+  const [linkLabel,setLinkLabel] = useState('')
+  const [linkUrl,setLinkUrl] = useState('')
 
   const reload = useCallback(async () => {
     const result = await request<Collaboration>('/api/cards/' + cardId + '/collaboration')
@@ -71,7 +75,7 @@ export default function CollaborationV6({cardId,projectId,viewer,onChanged}: Pro
   },[cardId])
   useEffect(() => {
     let active=true
-    setData(null);setError('');setBody('');setEditId(null)
+    setData(null);setError('');setBody('');setEditId(null);setLinkLabel('');setLinkUrl('')
     void Promise.all([request<Collaboration>('/api/cards/' + cardId + '/collaboration'),
       request<Mentions>('/api/projects/' + projectId + '/mentions')])
       .then(([d,m])=>{if(active){setData(d);setMentions(m)}})
@@ -133,6 +137,24 @@ export default function CollaborationV6({cardId,projectId,viewer,onChanged}: Pro
       await onChanged()
     })
   }
+  async function addLink(e:FormEvent) {
+    e.preventDefault()
+    if (!linkLabel.trim() || !linkUrl.trim()) return
+    await act(async () => {
+      await request('/api/cards/' + cardId + '/links','POST',{
+        label:linkLabel.trim(),url:linkUrl.trim()
+      })
+      setLinkLabel('');setLinkUrl('')
+      await onChanged()
+    })
+  }
+  async function removeLink(id:number) {
+    if (!window.confirm('Retirer ce lien de la carte ?')) return
+    await act(async () => {
+      await request('/api/cards/' + cardId + '/links/' + id,'DELETE')
+      await onChanged()
+    })
+  }
   const fileUrl=(id:number)=>'/api/cards/' + cardId + '/attachments/' + id
   return <div className="co-root">
     {error && <p className="kb-error" role="alert">{error}</p>}
@@ -153,6 +175,36 @@ export default function CollaborationV6({cardId,projectId,viewer,onChanged}: Pro
           {(f.uploaded_by===viewer.id || viewer.role==='superadmin') && <button disabled={busy} className="co-file-button" title="Supprimer le fichier" onClick={()=>void removeFile(f.id)}><Trash2 size={15}/></button>}
         </div>)}
       </div>
+    </section>
+    <section className="co-section">
+      <div className="co-title"><Link2 size={17}/><h3>Liens utiles</h3><span>{data?.links.length || 0}</span></div>
+      <p className="co-muted">Ajoutez le lien Zoom, la billetterie Eventbrite, un agenda ou une autre ressource en ligne.</p>
+      <div className="co-files">
+        {data?.links.map(link => <div className="co-file" key={link.id}>
+          <Link2 size={19} className="co-link-icon"/>
+          <div className="co-file-info">
+            <a href={link.url} target="_blank" rel="noopener noreferrer"><strong>{link.label}</strong> <ExternalLink size={12}/></a>
+            <small title={link.url}>{link.url}</small>
+          </div>
+          {(link.created_by===viewer.id || viewer.role==='superadmin') &&
+            <button type="button" className="co-file-button" title="Supprimer le lien"
+              aria-label={'Supprimer le lien '+link.label} disabled={busy} onClick={()=>void removeLink(link.id)}>
+              <Trash2 size={15}/>
+            </button>}
+        </div>)}
+      </div>
+      <form className="co-link-form" onSubmit={e => void addLink(e)}>
+        <label>Nom du lien
+          <input type="text" value={linkLabel} maxLength={120} required
+            placeholder="Ex. : Réunion Zoom ou Billetterie Eventbrite"
+            onChange={e=>setLinkLabel(e.target.value)}/>
+        </label>
+        <label>Adresse du lien
+          <input type="url" inputMode="url" value={linkUrl} maxLength={2048} required
+            placeholder="https://..." onChange={e=>setLinkUrl(e.target.value)}/>
+        </label>
+        <button type="submit" disabled={busy || !linkLabel.trim() || !linkUrl.trim()}><Plus size={15}/> Ajouter le lien</button>
+      </form>
     </section>
     <section className="co-section">
       <div className="co-title"><MessageCircle size={17}/><h3>Commentaires</h3><span>{data?.comments.length || 0}</span></div>
