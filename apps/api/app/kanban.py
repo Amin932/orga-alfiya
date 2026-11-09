@@ -144,7 +144,7 @@ def register_card_routes(app, db, current_user, admin, require_request):
                 FROM cards c JOIN users u ON u.id=c.created_by
                 LEFT JOIN cards origin ON origin.id=c.source_card_id
                 LEFT JOIN poles origin_pole ON origin_pole.id=origin.pole_id
-                LEFT JOIN cards sent ON sent.source_card_id=c.id AND sent.deleted_at IS NULL
+                LEFT JOIN cards sent ON sent.source_card_id=c.id
                 WHERE c.pole_id=%s AND c.deleted_at IS NULL
                 ORDER BY CASE c.status WHEN 'todo' THEN 0 WHEN 'progress' THEN 1 ELSE 2 END,
                 c.position,c.id""", (pole_id,)).fetchall()
