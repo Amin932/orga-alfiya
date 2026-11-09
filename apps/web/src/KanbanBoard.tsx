@@ -62,7 +62,7 @@ function CardFace({ card, onClick, dragging = false }: { card: Card; onClick?: (
 }
 
 function SortableCard({ card, onOpen }: { card: Card; onOpen: (card: Card) => void }) {
-  const { setNodeRef, attributes, listeners, transform, transition, isDragging } = useSortable({ id: 'card-' + card.id })
+  const { setNodeRef, attributes, listeners, transform, transition, isDragging } = useSortable({ id: 'card-' + card.id, disabled: Boolean(card.sent_card_id) })
   return <div ref={setNodeRef} className={'kb-sortable' + (isDragging ? ' kb-ghost' : '')} style={{ transform: CSS.Transform.toString(transform), transition }}
     {...attributes} {...listeners} title="Glisser la carte pour la déplacer (appui prolongé sur mobile)">
     <div className="kb-grab" aria-hidden="true"><GripVertical size={18}/></div>
@@ -320,7 +320,7 @@ export default function KanbanBoard({ poleId, projectId, viewer, isCommunication
         <div className="modal-top"><span className="kb-tag">{opened.template_id ? (templates.find(t => t.id === opened.template_id)?.name || 'Carte avec modèle') : 'Carte libre'}</span><button className="icon-button" onClick={closeCard} aria-label="Fermer"><X size={20}/></button></div>
         <form className="kb-form" onSubmit={saveCard}>
           {touchMode && <label>Statut de la mission
-            <select value={opened.status} disabled={busy} onChange={e => void changeStatus(e.target.value as Status)}>
+            <select value={opened.status} disabled={busy || Boolean(opened.sent_card_id)} onChange={e => void changeStatus(e.target.value as Status)}>
               {statuses.map(s => <option key={s.id} value={s.id}>{s.name}</option>)}
             </select>
           </label>}
