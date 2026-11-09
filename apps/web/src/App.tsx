@@ -9,6 +9,8 @@ type Pole = { id: number; project_id: number; name: string; color: string; descr
 type Project = { id: number; name: string; description: string; poles: Pole[] }
 type Viewer = { id: number; role: string; first_name: string; email: string; primaryColor?: string }
 
+const isCommunicationName = (name: string) => name.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '').split(/\s+/).includes('communication')
+
 export default function App({ viewer, onAdmin }: { viewer: Viewer; onAdmin?: () => void }) {
   const [projects, setProjects] = useState<Project[]>([])
   const [loading, setLoading] = useState(true)
@@ -85,7 +87,9 @@ export default function App({ viewer, onAdmin }: { viewer: Viewer; onAdmin?: () 
         </> : <>
           <nav className="breadcrumbs"><button onClick={home}>Mes projets</button><ChevronRight size={14}/><button onClick={() => enterProject(project.id)}>{project.name}</button><ChevronRight size={14}/><span>{pole.name}</span></nav>
           <section className="board-heading"><div><p className="eyebrow">TABLEAU DE PÔLE</p><div className="board-title"><span className="pole-dot-large" style={{ backgroundColor:pole.color }}/><h1>{pole.name}</h1></div><p>{pole.description}</p></div></section>
-          <KanbanBoard key={pole.id} poleId={String(pole.id)} projectId={String(project.id)} viewer={viewer}/>
+          <KanbanBoard key={pole.id} poleId={String(pole.id)} projectId={String(project.id)} viewer={viewer}
+            isCommunicationPole={isCommunicationName(pole.name)}
+            hasCommunicationPole={project.poles.some(p => isCommunicationName(p.name))}/>
         </>}
       </main>
     </div>
