@@ -4,6 +4,8 @@ from typing import Literal
 
 from fastapi import Depends, HTTPException, Request
 from pydantic import BaseModel, Field, model_validator
+from psycopg.types.json import Jsonb
+import unicodedata
 from .templates_v5 import instantiate_template
 from .collaboration_v6 import record_activity, purge_card_files, unlink_stored_files
 from .notifications_v7 import notify, subscribers
@@ -73,6 +75,8 @@ def schema_cards(db):
                 user_id BIGINT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
                 PRIMARY KEY(card_id,user_id)
             )""",
+            "ALTER TABLE cards ADD COLUMN IF NOT EXISTS source_card_id BIGINT REFERENCES cards(id) ON DELETE SET NULL",
+            "CREATE UNIQUE INDEX IF NOT EXISTS cards_unique_handoff_idx ON cards(source_card_id) WHERE source_card_id IS NOT NULL",
             "CREATE INDEX IF NOT EXISTS cards_pole_status_idx ON cards(pole_id,status,position,id) WHERE deleted_at IS NULL",
             "CREATE INDEX IF NOT EXISTS cards_deleted_idx ON cards(deleted_at) WHERE deleted_at IS NOT NULL",
         ]:
@@ -115,14 +119,32 @@ def register_card_routes(app, db, current_user, admin, require_request):
         if start and due and due < start:
             raise HTTPException(422, "L'échéance doit être postérieure au début")
 
+    def normalized_pole(name: str) -> str:
+        text = unicodedata.normalize("NFKD", name.casefold())
+        return " ".join("".join(c for c in text if not unicodedata.combining(c)).split())
+
+    def communication_pole(conn, project_id: int):
+        poles = conn.execute("SELECT id,name FROM poles WHERE project_id=%s ORDER BY id", (project_id,)).fetchall()
+        matches = [p for p in poles if "communication" in normalized_pole(p["name"]).split()]
+        if len(matches) > 1:
+            raise HTTPException(409, "Plusieurs pôles Communication : renommez-les pour lever l’ambiguïté")
+        if not matches:
+            raise HTTPException(422, "Créez d’abord un pôle nommé Communication dans ce projet")
+        return matches[0]
+
     @app.get("/api/poles/{pole_id}/cards")
     def list_cards(pole_id: int, user=Depends(current_user)):
         with db() as conn:
             pole_access(conn, pole_id, user)
             cards = conn.execute("""SELECT c.id,c.pole_id,c.title,c.description,c.template_key,c.template_id,c.cover_attachment_id,
-                c.status,c.position,c.start_date,c.due_date,c.created_at,c.updated_at,
+                c.status,c.position,c.start_date,c.due_date,c.created_at,c.updated_at,c.source_card_id,
+                origin.pole_id AS source_pole_id, origin_pole.name AS source_pole_name,
+                sent.id AS sent_card_id, sent.pole_id AS sent_pole_id,
                 c.created_by,u.first_name AS author_first_name,u.last_name AS author_last_name
                 FROM cards c JOIN users u ON u.id=c.created_by
+                LEFT JOIN cards origin ON origin.id=c.source_card_id
+                LEFT JOIN poles origin_pole ON origin_pole.id=origin.pole_id
+                LEFT JOIN cards sent ON sent.source_card_id=c.id AND sent.deleted_at IS NULL
                 WHERE c.pole_id=%s AND c.deleted_at IS NULL
                 ORDER BY CASE c.status WHEN 'todo' THEN 0 WHEN 'progress' THEN 1 ELSE 2 END,
                 c.position,c.id""", (pole_id,)).fetchall()
@@ -139,11 +161,11 @@ def register_card_routes(app, db, current_user, admin, require_request):
             conn.execute("SELECT id FROM poles WHERE id=%s FOR UPDATE", (pole_id,))
             position = conn.execute("""SELECT COALESCE(MAX(position),-1)+1 AS next
                 FROM cards WHERE pole_id=%s AND status=%s AND deleted_at IS NULL""",
-                (pole_id, body.status)).fetchone()["next"]
+                (pole_id, "todo")).fetchone()["next"]
             card = conn.execute("""INSERT INTO cards
                 (pole_id,created_by,title,status,template_key,position)
                 VALUES (%s,%s,%s,%s,%s,%s) RETURNING *""",
-                (pole_id,user["id"],title,body.status,body.template_key,position)).fetchone()
+                (pole_id,user["id"],title,"todo",body.template_key,position)).fetchone()
             template = None
             if body.template_id is not None:
                 template = conn.execute("SELECT * FROM templates WHERE id=%s",
@@ -157,7 +179,7 @@ def register_card_routes(app, db, current_user, admin, require_request):
                 instantiate_template(conn, card["id"], template)
                 card["template_id"] = template["id"]
             record_activity(conn,card["id"],user["id"],"card_created",
-                            {"title":title,"status":body.status})
+                            {"title":title,"status":"todo"})
             return as_dict(conn, card)
 
     @app.patch("/api/cards/{card_id}")
@@ -181,7 +203,7 @@ def register_card_routes(app, db, current_user, admin, require_request):
             row = conn.execute(f"UPDATE cards SET {columns},updated_at=now() WHERE id=%s RETURNING *",
                                (*args, card_id)).fetchone()
             record_activity(conn,card_id,user["id"],"card_updated",{"fields":sorted(values)})
-            return as_dict(conn, row)
+            return as_dict(conn, conn.execute("SELECT * FROM cards WHERE id=%s", (card_id,)).fetchone())
 
     @app.get("/api/projects/{project_id}/card-members")
     def card_members(project_id: int, user=Depends(current_user)):
@@ -274,6 +296,77 @@ def register_card_routes(app, db, current_user, admin, require_request):
                            f'« {card["title"]} » a été marquée terminée.',
                            card_id,actor_id=user["id"])
             return {"status": "updated"}
+
+    @app.post("/api/cards/{card_id}/send-to-communication", status_code=201)
+    def send_to_communication(card_id: int, request: Request, user=Depends(current_user)):
+        """Close the origin task and create a separately actionable Communication task."""
+        require_request(request)
+        with db() as conn:
+            source = card_access(conn, card_id, user, lock=True)
+            if source["deleted_at"]:
+                raise HTTPException(410, "Carte supprimée")
+            if source["source_card_id"] is not None:
+                raise HTTPException(422, "Une carte reçue par Communication ne peut pas être renvoyée")
+            destination = communication_pole(conn, source["project_id"])
+            if destination["id"] == source["pole_id"]:
+                raise HTTPException(422, "Cette carte est déjà dans le pôle Communication")
+            existing = conn.execute("SELECT id FROM cards WHERE source_card_id=%s",
+                                    (card_id,)).fetchone()
+            if existing:
+                raise HTTPException(409, "Cette carte a déjà été envoyée au pôle Communication")
+            conn.execute("SELECT id FROM poles WHERE id=%s FOR UPDATE", (destination["id"],))
+            position = conn.execute("""SELECT COALESCE(MAX(position), -1)+1 AS n
+                FROM cards WHERE pole_id=%s AND status='todo' AND deleted_at IS NULL""",
+                (destination["id"],)).fetchone()["n"]
+            received = conn.execute("""INSERT INTO cards
+                (pole_id,created_by,title,description,status,position,start_date,due_date,
+                 template_key,template_id,template_snapshot,template_values,source_card_id)
+                VALUES (%s,%s,%s,%s,'todo',%s,%s,%s,%s,%s,%s,%s,%s)
+                RETURNING id""", (
+                    destination["id"], user["id"], source["title"], source["description"],
+                    position, source["start_date"], source["due_date"],
+                    source["template_key"], source["template_id"],
+                    Jsonb(source["template_snapshot"]), Jsonb(source["template_values"]), card_id
+                )).fetchone()
+            received_id = received["id"]
+            checklist = conn.execute("""INSERT INTO card_checklists(card_id,title,position)
+                VALUES (%s,'Préparation communication',0) RETURNING id""",
+                (received_id,)).fetchone()
+            steps = (
+                "Vérifier les informations de l’événement",
+                "Créer le visuel de communication",
+                "Préparer ou vérifier le lien Eventbrite",
+                "Programmer et diffuser la communication",
+            )
+            for index, label in enumerate(steps):
+                conn.execute("""INSERT INTO card_checklist_items(checklist_id,text,position)
+                    VALUES (%s,%s,%s)""", (checklist["id"], label, index))
+            conn.execute("""UPDATE cards AS c SET status='done',updated_at=now(),
+                position=(SELECT COALESCE(MAX(other.position),-1)+1
+                          FROM cards other WHERE other.pole_id=c.pole_id
+                            AND other.status='done' AND other.deleted_at IS NULL)
+                WHERE c.id=%s""", (card_id,))
+            record_activity(conn, card_id, user["id"], "card_sent_to_communication",
+                            {"destination_pole_id":destination["id"],"destination_card_id":received_id})
+            record_activity(conn, received_id, user["id"], "card_received_from_pole",
+                            {"origin_card_id":card_id,"origin_pole_id":source["pole_id"]})
+            for member in conn.execute("""SELECT DISTINCT u.id FROM user_poles up
+                JOIN users u ON u.id=up.user_id
+                LEFT JOIN project_access pa ON pa.user_id=u.id AND pa.project_id=%s
+                WHERE up.pole_id=%s AND u.active=true
+                  AND (u.role='superadmin' OR pa.user_id IS NOT NULL)""",
+                (source["project_id"],destination["id"])).fetchall():
+                notify(conn,member["id"],"handoff","Nouvelle mission pour Communication",
+                       f"« {source['title']} » a été transmise au pôle Communication.",
+                       received_id,dedupe_key=f"handoff:{received_id}:{member['id']}",
+                       actor_id=user["id"])
+            for member_id in subscribers(conn,card_id):
+                notify(conn,member_id,"completed","Mission transmise à Communication",
+                       f"« {source['title']} » est terminée dans son pôle d’origine.",
+                       card_id,dedupe_key=f"source-completed:{card_id}:{member_id}",
+                       actor_id=user["id"])
+            return {"status":"sent","communication_card_id":received_id,
+                    "communication_pole_id":destination["id"]}
 
     @app.post("/api/cards/{card_id}/trash")
     def trash_card(card_id: int, request: Request, user=Depends(current_user)):
