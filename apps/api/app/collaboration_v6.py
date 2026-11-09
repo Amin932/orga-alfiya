@@ -4,6 +4,7 @@ import os
 import re
 import secrets
 from pathlib import Path
+from urllib.parse import urlsplit
 
 from fastapi import Depends, File, HTTPException, Request, UploadFile
 from fastapi.responses import FileResponse
@@ -36,6 +37,29 @@ class CommentInput(BaseModel):
 
 class CoverInput(BaseModel):
     attachment_id: int | None = Field(default=None, gt=0)
+
+
+class CardLinkInput(BaseModel):
+    label: str = Field(min_length=1,max_length=120)
+    url: str = Field(min_length=8,max_length=2048)
+
+    @model_validator(mode="after")
+    def valid_link(self):
+        self.label = self.label.strip()
+        self.url = self.url.strip()
+        if not self.label:
+            raise ValueError("Le nom du lien est requis")
+        if any(c.isspace() or ord(c)<32 or c=="\\" for c in self.url):
+            raise ValueError("URL invalide")
+        try:
+            parsed = urlsplit(self.url)
+            if (parsed.scheme not in ("https","http") or not parsed.hostname
+                or parsed.username is not None or parsed.password is not None
+                or parsed.port == 0):
+                raise ValueError("Seuls les liens http(s) sans identifiants sont acceptés")
+        except ValueError as e:
+            raise ValueError("URL invalide : " + str(e)) from None
+        return self
 
 
 def valid_signature(extension, first):
@@ -85,6 +109,15 @@ def schema_collaboration(db):
                 created_at TIMESTAMPTZ NOT NULL DEFAULT now()
             )""",
             "ALTER TABLE cards ADD COLUMN IF NOT EXISTS cover_attachment_id BIGINT REFERENCES card_attachments(id) ON DELETE SET NULL",
+            """CREATE TABLE IF NOT EXISTS card_links (
+                id BIGSERIAL PRIMARY KEY,
+                card_id BIGINT NOT NULL REFERENCES cards(id) ON DELETE CASCADE,
+                created_by BIGINT NOT NULL REFERENCES users(id) ON DELETE RESTRICT,
+                label VARCHAR(120) NOT NULL,
+                url VARCHAR(2048) NOT NULL,
+                created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+            )""",
+            "CREATE INDEX IF NOT EXISTS card_links_card_idx ON card_links(card_id,id)",
             """CREATE TABLE IF NOT EXISTS card_activity (
                 id BIGSERIAL PRIMARY KEY,
                 card_id BIGINT NOT NULL REFERENCES cards(id) ON DELETE CASCADE,
@@ -108,6 +141,7 @@ WORK_STARTED_ACTIONS = frozenset({
     "checklist_item_added", "checklist_item_updated",
     "checklist_checked", "checklist_item_deleted",
     "comment_created", "comment_updated", "comment_deleted",
+    "link_added", "link_deleted",
     "file_added", "file_deleted", "cover_changed",
 })
 
@@ -205,13 +239,48 @@ def register_collaboration_routes(app, db, current_user, require_request):
                 a.id=(SELECT cover_attachment_id FROM cards WHERE id=%s) AS is_cover
                 FROM card_attachments a JOIN users u ON u.id=a.uploaded_by
                 WHERE a.card_id=%s ORDER BY a.id""",(card_id,card_id)).fetchall()
+            links = conn.execute("""SELECT id,label,url,created_by,created_at
+                FROM card_links WHERE card_id=%s ORDER BY id""",(card_id,)).fetchall()
             activity = conn.execute("""SELECT ac.id,ac.action,ac.details,ac.created_at,ac.actor_id,
                 u.first_name,u.last_name,
                 (SELECT po.color FROM user_poles up JOIN poles po ON po.id=up.pole_id
                   WHERE up.user_id=ac.actor_id ORDER BY up.position,po.id LIMIT 1) AS color
                 FROM card_activity ac JOIN users u ON u.id=ac.actor_id
                 WHERE ac.card_id=%s ORDER BY ac.id DESC LIMIT 150""",(card_id,)).fetchall()
-        return {"comments":comments,"files":files,"activity":activity}
+        return {"comments":comments,"files":files,"links":links,"activity":activity}
+
+    @app.post("/api/cards/{card_id}/links", status_code=201)
+    def add_link(card_id: int, body: CardLinkInput, request: Request,
+                 user=Depends(current_user)):
+        require_request(request)
+        with db() as conn:
+            get_card(conn, card_id, user)
+            current = conn.execute("SELECT COUNT(*) AS total FROM card_links WHERE card_id=%s",
+                                   (card_id,)).fetchone()["total"]
+            if current >= 50:
+                raise HTTPException(422, "Maximum 50 liens par carte")
+            new_link = conn.execute("""INSERT INTO card_links(card_id,created_by,label,url)
+                VALUES (%s,%s,%s,%s) RETURNING id,label,url,created_by,created_at""",
+                (card_id,user["id"],body.label,body.url)).fetchone()
+            record_activity(conn,card_id,user["id"],"link_added",
+                            {"link_id":new_link["id"],"label":body.label})
+            return new_link
+
+    @app.delete("/api/cards/{card_id}/links/{link_id}")
+    def delete_link(card_id: int, link_id: int, request: Request,
+                    user=Depends(current_user)):
+        require_request(request)
+        with db() as conn:
+            get_card(conn,card_id,user)
+            link = conn.execute("""SELECT id,created_by FROM card_links
+                WHERE id=%s AND card_id=%s FOR UPDATE""",(link_id,card_id)).fetchone()
+            if not link:
+                raise HTTPException(404, "Lien introuvable")
+            if link["created_by"] != user["id"] and user["role"] != "superadmin":
+                raise HTTPException(403, "Seul l'auteur ou le super-administrateur peut retirer le lien")
+            conn.execute("DELETE FROM card_links WHERE id=%s",(link_id,))
+            record_activity(conn,card_id,user["id"],"link_deleted",{"link_id":link_id})
+            return {"status":"deleted"}
 
     @app.post("/api/cards/{card_id}/comments", status_code=201)
     def comment(card_id:int, body: CommentInput, request:Request, user=Depends(current_user)):
