@@ -367,6 +367,7 @@ def register_template_routes(app, db, current_user, admin, require_request):
             get_list(conn,card_id,list_id,user)
             conn.execute("UPDATE card_checklists SET title=%s WHERE id=%s",
                          (body.title.strip(),list_id))
+            record_activity(conn,card_id,user["id"],"checklist_renamed",{"list_id":list_id})
         return {"status":"updated"}
 
     @app.delete("/api/cards/{card_id}/checklists/{list_id}")
