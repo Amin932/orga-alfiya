@@ -111,6 +111,19 @@ Pour les push, l'utilisateur doit autoriser les notifications ; un navigateur co
 
 **Déploiement effectif sur le NAS : pas encore réalisé depuis ce dépôt.** L'URL HTTPS ne doit pas être présentée comme opérationnelle tant qu'un test réel depuis l'extérieur n'a pas réussi.
 
+## Circuit de travail entre pôles (nouvelle fonctionnalité)
+
+- Toute nouvelle carte est créée **dans « À faire »**, même si un ancien client transmet un autre statut.
+- Les premières actions de travail (modification du contenu, checklist, commentaire, attribution, pièce jointe) font automatiquement passer une carte « À faire » à **« En cours »**. Une carte « Terminé » n'est pas rouverte par ces actions.
+- Depuis la fiche d'une carte d'un pôle autre que Communication, bouton **« Envoyer au pôle communication »** en bas : validation explicite, source classée « Terminé » et **nouvelle carte indépendante « À faire »** dans le pôle Communication du même projet.
+- La nouvelle carte reprend titre, description, dates et données structurées du modèle de l'événement, avec une nouvelle checklist Communication (informations, visuel, Eventbrite, diffusion).
+- Les checklists d'origine, les commentaires et les documents joints ne sont pas dupliqués : le pôle Communication peut consulter les documents dans la carte d'origine via le lien prévu. Les mises à jour ultérieures de l'une des cartes ne modifient pas automatiquement l'autre.
+- Un même événement ne peut pas être envoyé deux fois ; la carte d'origine reste clôturée après transmission, même si son contenu est consulté ou modifié.
+- Les membres actifs affectés au pôle Communication reçoivent une notification interne (et une push s'ils l'ont activée), sans SMTP.
+- Le pôle destination doit contenir le mot **« Communication »** dans son nom (par exemple « Communication » ou « Pôle Communication »), sans plusieurs correspondances dans un même projet.
+- Sur appareil tactile, l'avancement s'effectue via le sélecteur de statut de la fiche ; sur ordinateur, le glisser-déposer reste possible pour les cartes non transférées.
+- **Déploiement :** une mise à jour du code et une recréation de l'API + du web sont nécessaires ; les évolutions de schéma PostgreSQL sont appliquées automatiquement au démarrage, sans effacer les anciennes cartes. Faire une sauvegarde préalable et tester avec un projet non critique.
+
 ## Configuration sur Synology
 
 1. Cloner `https://github.com/Amin932/orga-alfiya.git` dans `/volume1/docker/orga-alfiya`.
