@@ -54,6 +54,9 @@ const actionLabels: Record<string,string> = {
   checklist_item_deleted:'a supprimé une tâche',checklist_item_updated:'a modifié une tâche',
   template_updated:'a rempli les informations du modèle',
   link_added:'a ajouté un lien',link_deleted:'a supprimé un lien',
+  card_sent_to_communication:'a envoyé la mission au pôle Communication',
+  card_received_from_pole:'a transmis une mission depuis un autre pôle',
+  checklist_renamed:'a renommé une checklist',
 }
 
 export default function CollaborationV6({cardId,projectId,viewer,onChanged}: Props) {
