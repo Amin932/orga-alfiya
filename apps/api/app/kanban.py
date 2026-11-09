@@ -266,6 +266,9 @@ def register_card_routes(app, db, current_user, admin, require_request):
             card = card_access(conn, card_id, user, lock=True)
             if card["deleted_at"]:
                 raise HTTPException(410, "Carte supprimée")
+            if body.status != "done" and conn.execute(
+                "SELECT 1 FROM cards WHERE source_card_id=%s", (card_id,)).fetchone():
+                raise HTTPException(409, "Mission déjà transmise : son statut reste Terminé dans ce pôle")
             if body.before_id == card_id:
                 return {"status": "updated"}
             if body.before_id is not None:
