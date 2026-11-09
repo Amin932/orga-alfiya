@@ -7,7 +7,7 @@ from urllib.parse import urlsplit
 from fastapi import Depends, HTTPException, Request
 from pydantic import BaseModel, Field
 
-EVENT_TYPES = ("assignment", "mention", "comment", "completed", "reminder", "overdue", "project_access", "critical")
+EVENT_TYPES = ("assignment", "handoff", "mention", "comment", "completed", "reminder", "overdue", "project_access", "critical")
 DEFAULT_EVENTS = {event: True for event in EVENT_TYPES}
 MAX_ITEMS = 50
 
