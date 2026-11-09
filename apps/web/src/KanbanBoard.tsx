@@ -6,7 +6,7 @@ import {
 } from '@dnd-kit/core'
 import { SortableContext, useSortable, sortableKeyboardCoordinates, verticalListSortingStrategy } from '@dnd-kit/sortable'
 import { CSS } from '@dnd-kit/utilities'
-import { CalendarDays, Check, ChevronDown, GripVertical, Plus, Search, Trash2, Users, X } from 'lucide-react'
+import { ArrowRight, CalendarDays, Check, ChevronDown, GripVertical, Plus, Search, Trash2, Users, X } from 'lucide-react'
 import './kanban.css'
 import { CardTemplateContent, listTemplates, type Template as LibraryTemplate } from './TemplatesV5'
 import CollaborationV6 from './CollaborationV6'
@@ -19,11 +19,13 @@ type Card = {
   id: number; title: string; description: string; status: Status; position: number;
   start_date: string | null; due_date: string | null; template_key: Template; template_id: number | null; cover_attachment_id: number | null;
   created_by: number; author_first_name?: string; author_last_name?: string;
+  source_card_id: number | null; source_pole_id: number | null; source_pole_name: string | null;
+  sent_card_id: number | null; sent_pole_id: number | null;
   assignees: Member[];
 }
 type Filter = { q: string; dateField: 'start_date' | 'due_date'; from: string; to: string; sort: 'manual' | 'az' | 'start' | 'due' }
 type Viewer = { id: number; role: string; first_name: string; email: string }
-type Props = { poleId: string; projectId: string; viewer: Viewer }
+type Props = { poleId: string; projectId: string; viewer: Viewer; isCommunicationPole: boolean; hasCommunicationPole: boolean }
 const statuses: { id: Status; name: string; color: string }[] = [
   { id: 'todo', name: 'À faire', color: '#ca985a' },
   { id: 'progress', name: 'En cours', color: '#699ab7' },
@@ -95,11 +97,11 @@ function Column({ status, cards, filters, changeFilter, onOpen, onAdd, touchMode
         {!cards.length && <p className="kb-empty">Aucune carte visible</p>}
       </div>
     </SortableContext>
-    <button className="kb-add" type="button" onClick={onAdd}><Plus size={16}/> Ajouter une carte</button>
+    {status.id === "todo" && <button className="kb-add" type="button" onClick={onAdd}><Plus size={16}/> Ajouter une carte</button>}
   </section>
 }
 
-export default function KanbanBoard({ poleId, projectId, viewer }: Props) {
+export default function KanbanBoard({ poleId, projectId, viewer, isCommunicationPole, hasCommunicationPole }: Props) {
   const [cards, setCards] = useState<Card[]>([])
   const [members, setMembers] = useState<Member[]>([])
   const [loading, setLoading] = useState(true)
@@ -112,6 +114,7 @@ export default function KanbanBoard({ poleId, projectId, viewer }: Props) {
   const [templates, setTemplates] = useState<LibraryTemplate[]>([])
   const [busy, setBusy] = useState(false)
   const [dragId, setDragId] = useState<number | null>(null)
+  const [handoffNotice, setHandoffNotice] = useState('')
   const [touchMode, setTouchMode] = useState(() => window.matchMedia('(pointer: coarse)').matches)
   useEffect(() => {
     const media = window.matchMedia('(pointer: coarse)')
@@ -215,6 +218,7 @@ export default function KanbanBoard({ poleId, projectId, viewer }: Props) {
     setFilters(previous => ({ ...previous, [status]: { ...previous[status], [key]: value } }))
   }
   function openCard(c: Card) {
+    setHandoffNotice('')
     setOpened(c)
     setDraft({ title: c.title, description: c.description || '', start_date: c.start_date || '', due_date: c.due_date || '' })
   }
@@ -242,8 +246,29 @@ export default function KanbanBoard({ poleId, projectId, viewer }: Props) {
         title: draft.title.trim(), description: draft.description,
         start_date: draft.start_date || null, due_date: draft.due_date || null
       })
-      await load(); setOpened(previous => previous ? {...previous,...draft,start_date:draft.start_date || null,due_date:draft.due_date || null} : null)
+      const latest=await load()
+      setOpened(previous => previous ? latest.find(c=>c.id===previous.id) ?? null : null)
     } catch (e) { setError(e instanceof Error ? e.message : 'Enregistrement impossible') }
+    finally { setBusy(false) }
+  }
+  async function refreshOpenedCard() {
+    const latest = await load()
+    setOpened(previous => previous ? latest.find(c => c.id === previous.id) ?? null : null)
+  }
+  function closeCard() {
+    setOpened(null)
+    setHandoffNotice('')
+    void load().catch(e => setError(e instanceof Error ? e.message : 'Chargement impossible'))
+  }
+  async function sendToCommunication() {
+    if (!opened || busy || opened.source_card_id || opened.sent_card_id) return
+    if (!window.confirm('Terminer cette mission dans ce pôle et transmettre une nouvelle carte au pôle Communication ?')) return
+    setBusy(true); setError(''); setHandoffNotice('')
+    try {
+      await api('/api/cards/' + opened.id + '/send-to-communication', 'POST', {})
+      await refreshOpenedCard()
+      setHandoffNotice('Carte transmise : terminée ici et ajoutée dans « À faire » du pôle Communication.')
+    } catch (e) { setError(e instanceof Error ? e.message : 'Transmission impossible') }
     finally { setBusy(false) }
   }
   async function assign(userId: number, checked: boolean) {
@@ -290,9 +315,9 @@ export default function KanbanBoard({ poleId, projectId, viewer }: Props) {
           <button className="primary-button" disabled={busy || !newTitle.trim()}><Plus size={15}/> Créer la carte</button>
         </form>
       </section></div>}
-    {opened && <div className="overlay" role="presentation" onClick={() => setOpened(null)}>
+    {opened && <div className="overlay" role="presentation" onClick={closeCard}>
       <section className="detail-modal kb-modal kb-detail" role="dialog" aria-modal="true" aria-label={opened.title} onClick={e => e.stopPropagation()}>
-        <div className="modal-top"><span className="kb-tag">{opened.template_id ? (templates.find(t => t.id === opened.template_id)?.name || 'Carte avec modèle') : 'Carte libre'}</span><button className="icon-button" onClick={() => setOpened(null)} aria-label="Fermer"><X size={20}/></button></div>
+        <div className="modal-top"><span className="kb-tag">{opened.template_id ? (templates.find(t => t.id === opened.template_id)?.name || 'Carte avec modèle') : 'Carte libre'}</span><button className="icon-button" onClick={closeCard} aria-label="Fermer"><X size={20}/></button></div>
         <form className="kb-form" onSubmit={saveCard}>
           {touchMode && <label>Statut de la mission
             <select value={opened.status} disabled={busy} onChange={e => void changeStatus(e.target.value as Status)}>
@@ -305,15 +330,30 @@ export default function KanbanBoard({ poleId, projectId, viewer }: Props) {
             <label>Échéance<input type="date" value={draft.due_date} onChange={e => setDraft(d => ({ ...d, due_date: e.target.value }))}/></label></div>
           <button className="primary-button" disabled={busy || !draft.title.trim()}><Check size={16}/> Enregistrer</button>
         </form>
-        <CardTemplateContent cardId={opened.id}/>
+        <CardTemplateContent cardId={opened.id} onChanged={() => void refreshOpenedCard()}/>
         <FollowCardV7 cardId={opened.id}/>
         <CardRemindersV7 cardId={opened.id}/>
-        <CollaborationV6 cardId={opened.id} projectId={Number(projectId)} viewer={viewer} onChanged={async () => { const latest=await load(); setOpened(previous => previous ? latest.find(c=>c.id===previous.id) ?? previous : null) }}/>
+        <CollaborationV6 cardId={opened.id} projectId={Number(projectId)} viewer={viewer} onChanged={refreshOpenedCard}/>
         <div className="kb-assign"><h3><Users size={17}/> Responsables</h3><div className="kb-member-list">{members.map(m =>
           <label key={m.id}><input type="checkbox" disabled={busy} checked={opened.assignees.some(a => a.id === m.id)} onChange={e => void assign(m.id,e.target.checked)}/><span className="kb-person-tag" style={{ borderColor: m.color || '#c4b2a5' }}>{fullName(m)}</span></label>)}
           {!members.length && <p>Aucun membre disponible.</p>}</div></div>
         <div className="kb-detail-foot"><span>Créée par {opened.author_first_name || 'un membre'} {opened.author_last_name || ''}</span>
           {(viewer.role === 'superadmin' || viewer.id === opened.created_by) && <button className="kb-trash" onClick={() => void trash()} disabled={busy}><Trash2 size={15}/> Mettre à la corbeille</button>}</div>
+        {opened.source_card_id && <div className="kb-handoff-link">
+          <strong>Mission reçue depuis {opened.source_pole_name || 'un autre pôle'}.</strong>
+          {opened.source_pole_id && <a href={`/?project=${projectId}&pole=${opened.source_pole_id}&card=${opened.source_card_id}`}>Consulter la carte d'origine et ses documents <ArrowRight size={15}/></a>}
+        </div>}
+        {!opened.source_card_id && opened.sent_card_id && <div className="kb-handoff-link">
+          <strong>Mission déjà transmise au pôle Communication.</strong>
+          {opened.sent_pole_id && <a href={`/?project=${projectId}&pole=${opened.sent_pole_id}&card=${opened.sent_card_id}`}>Ouvrir la carte Communication <ArrowRight size={15}/></a>}
+        </div>}
+        {!isCommunicationPole && !opened.source_card_id && !opened.sent_card_id && hasCommunicationPole && <div className="kb-handoff">
+          <p>Une fois la préparation terminée, envoyez cette mission au pôle Communication. Elle sera classée « Terminé » ici et une copie démarrera en « À faire » chez eux.</p>
+          <button type="button" className="primary-button" disabled={busy} onClick={() => void sendToCommunication()}>
+            <ArrowRight size={16}/> Envoyer au pôle communication
+          </button>
+        </div>}
+        {handoffNotice && <p className="kb-handoff-success" role="status">{handoffNotice}</p>
       </section></div>}
   </div>
 }
