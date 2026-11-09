@@ -43,3 +43,13 @@
 .co-cover{height:120px;object-fit:cover;width:100%;border-radius:9px 9px 0 0}
 .co-cover-mini{height:70px;object-fit:cover;width:100%;display:block;border-radius:9px 9px 0 0}
 @media(max-width:620px){.co-file{flex-wrap:wrap}.co-file img{height:54px;width:65px}.co-event{flex-direction:column;gap:3px}}
+
+/* Liens externes de la carte : Zoom, Eventbrite, Google Agenda, etc. */
+.co-link-icon{flex-shrink:0;color:#aa8067;margin:4px!important}
+.co-file-info a{display:inline-flex;align-items:center;gap:5px;max-width:100%;overflow-wrap:anywhere}
+.co-file-info small{overflow-wrap:anywhere;word-break:break-word}
+.co-link-form{display:grid;gap:10px;margin-top:13px;background:#faf7f3;border:1px solid #eee4d9;border-radius:11px;padding:12px}
+.co-link-form label{display:grid;gap:5px;font-size:12px;font-weight:650;color:#68574b;min-width:0}
+.co-link-form input{width:100%;min-width:0;border:1px solid #dfd2c6;border-radius:8px;background:#fff;color:#56483e;padding:10px;font-size:13px}
+.co-link-form button{display:flex;align-items:center;justify-content:center;gap:7px;border:0;border-radius:9px;background:#a46b52;color:white;font-size:12px;font-weight:700;padding:10px}
+.co-link-form button:disabled{opacity:.5;cursor:not-allowed}
