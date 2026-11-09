@@ -332,18 +332,24 @@ def register_card_routes(app, db, current_user, admin, require_request):
                     Jsonb(source["template_snapshot"]), Jsonb(source["template_values"]), card_id
                 )).fetchone()
             received_id = received["id"]
+            # Only Communication receives the five communication-specific tasks.
             checklist = conn.execute("""INSERT INTO card_checklists(card_id,title,position)
-                VALUES (%s,'Préparation communication',0) RETURNING id""",
+                VALUES (%s,'Préparation avant le jour J — Communication',0) RETURNING id""",
                 (received_id,)).fetchone()
             steps = (
-                "Vérifier les informations de l’événement",
-                "Créer le visuel de communication",
-                "Préparer ou vérifier le lien Eventbrite",
-                "Programmer et diffuser la communication",
+                "Visuel de communication terminé",
+                "Eventbrite créé",
+                "Eventbrite publié",
+                "Mail programmé",
+                "Liste des participants du BDE et répartition des rôles prêtes",
             )
             for index, label in enumerate(steps):
                 conn.execute("""INSERT INTO card_checklist_items(checklist_id,text,position)
                     VALUES (%s,%s,%s)""", (checklist["id"], label, index))
+            # All useful Zoom/Eventbrite/Agenda links travel with the event.
+            conn.execute("""INSERT INTO card_links(card_id,created_by,label,url)
+                SELECT %s,%s,label,url FROM card_links WHERE card_id=%s ORDER BY id""",
+                (received_id,user["id"],card_id))
             conn.execute("""UPDATE cards AS c SET status='done',updated_at=now(),
                 position=(SELECT COALESCE(MAX(other.position),-1)+1
                           FROM cards other WHERE other.pole_id=c.pole_id
