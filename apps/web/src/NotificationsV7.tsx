@@ -9,7 +9,7 @@ type Notification = {
 }
 type Prefs = { push_enabled:boolean; events:Record<string,boolean> }
 const eventLabels:Record<string,string> = {
-  assignment:'Attributions de missions',mention:'Mentions dans les commentaires',
+  assignment:'Attributions de missions',handoff:'Nouvelles missions reçues par Communication',mention:'Mentions dans les commentaires',
   comment:'Commentaires des cartes suivies',completed:'Cartes terminées',
   reminder:'Rappels d’échéance (J-3, J-1, J0)',overdue:'Retards (J+1)',
   project_access:'Accès aux projets',critical:'Alertes importantes'
