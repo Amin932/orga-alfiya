@@ -88,12 +88,7 @@ def official_definitions():
     ]
     preparation = [
         "Description de la carte complétée",
-        "Visuel de communication terminé",
-        "Eventbrite créé",
         "Ajouter les mails des membres à l'événement dans Google Agenda une fois la date validée",
-        "Eventbrite publié",
-        "Mail programmé",
-        "Liste des participants du BDE et répartition des rôles prêtes",
     ]
     post = [
         "Publication post-événement (photo et texte)",
@@ -131,7 +126,7 @@ def official_definitions():
         "fields": description + info_base,
         "checklists": [
             {"title": "Préparation avant le jour J",
-             "items": [preparation[3], *preparation[:3], *preparation[4:]]},
+             "items": preparation},
             {"title": "Post-événement", "items": post},
         ]
     }
@@ -176,6 +171,43 @@ def schema_templates(db):
                 VALUES (%s,%s,true,%s,%s) ON CONFLICT (slug) DO NOTHING""",
                 (definition["slug"], definition["name"], Jsonb(definition["fields"]),
                  Jsonb(definition["checklists"])))
+        # Migration ciblée : les tâches Communication n'appartiennent plus aux modèles
+        # organisateurs. Ne pas écraser les autres champs/checklists personnalisés.
+        com_labels = {
+            "Visuel de communication terminé",
+            "Eventbrite créé",
+            "Eventbrite publié",
+            "Mail programmé",
+            "Liste des participants du BDE et répartition des rôles prêtes",
+        }
+        for slug in ("speaker", "no_speaker"):
+            template = conn.execute("SELECT id,checklists FROM templates WHERE slug=%s AND official=true",
+                                    (slug,)).fetchone()
+            if not template:
+                continue
+            updated = []
+            changed = False
+            for group in template["checklists"]:
+                if group["title"] == "Préparation avant le jour J":
+                    filtered = [item for item in group["items"] if item not in com_labels]
+                    changed |= len(filtered) != len(group["items"])
+                    updated.append({**group, "items": filtered})
+                else:
+                    updated.append(group)
+            if changed:
+                conn.execute("""UPDATE templates SET checklists=%s,updated_at=now()
+                    WHERE id=%s""", (Jsonb(updated), template["id"]))
+
+        # Les anciennes cartes sont traitées sans toucher aux tâches terminées
+        # (qui restent comme preuve du travail effectué) ni aux modèles personnels.
+        conn.execute("""DELETE FROM card_checklist_items AS i
+            USING card_checklists AS cl, cards AS c, templates AS t
+            WHERE i.checklist_id=cl.id AND cl.card_id=c.id
+              AND c.template_id=t.id AND t.official=true
+              AND t.slug IN ('speaker','no_speaker')
+              AND cl.title='Préparation avant le jour J'
+              AND i.done=false AND i.done_at IS NULL
+              AND i.text=ANY(%s)""", (list(com_labels),))
         # Cards created in block 4 can be populated once, without losing card content.
         for definition in official_definitions():
             template = conn.execute("SELECT * FROM templates WHERE slug=%s", (definition["slug"],)).fetchone()
