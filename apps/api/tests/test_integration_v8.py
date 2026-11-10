@@ -222,6 +222,16 @@ def test_communication_handoff_pipeline():
                 json={"label":"Réservation Eventbrite","url":"https://www.eventbrite.com/e/test-123"})
             assert eventbrite.status_code==201,eventbrite.text
             assert len(client.get(f"/api/cards/{destination_id}/collaboration").json()["links"])==2
+            reply=client.post(f"/api/cards/{destination_id}/comments",headers=headers,
+                json={"body":"Communication : visuel en cours de realisation."})
+            assert reply.status_code==201,reply.text
+            reply_id=reply.json()["id"]
+            origin_thread=client.get(f"/api/cards/{source_id}/collaboration").json()
+            assert origin_thread["comments_shared"] is True
+            assert [c["id"] for c in origin_thread["comments"]]==[source_note_id,reply_id]
+            non_author=client.patch(f"/api/cards/{destination_id}/comments/{source_note_id}",
+                headers=headers,json={"body":"Autre texte"})
+            assert non_author.status_code==403
             done=client.post(f"/api/cards/{destination_id}/move",headers=headers,
                 json={"status":"done","before_id":None})
             assert done.status_code==200,done.text
