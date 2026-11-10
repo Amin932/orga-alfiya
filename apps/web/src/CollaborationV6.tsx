@@ -7,7 +7,7 @@ type Comment = Author & { id: number; body: string; author_id: number; created_a
 type Attachment = { id: number; file_name: string; mime_type: string; size_bytes: number; is_cover: boolean; uploaded_by: number }
 type CardLink = { id: number; label: string; url: string; created_by: number; created_at: string }
 type Activity = Author & { id: number; action: string; details: Record<string, unknown>; created_at: string }
-type Collaboration = { comments: Comment[]; files: Attachment[]; links: CardLink[]; activity: Activity[] }
+type Collaboration = { comments: Comment[]; files: Attachment[]; links: CardLink[]; comments_shared: boolean; activity: Activity[] }
 type MentionUser = { id: number; first_name: string; last_name: string; color: string | null }
 type MentionPole = { id: number; name: string; color: string }
 type Mentions = { users: MentionUser[]; poles: MentionPole[] }
@@ -211,6 +211,10 @@ export default function CollaborationV6({cardId,projectId,viewer,onChanged}: Pro
     </section>
     <section className="co-section">
       <div className="co-title"><MessageCircle size={17}/><h3>Commentaires</h3><span>{data?.comments.length || 0}</span></div>
+      {data?.comments_shared && <p className="co-muted co-shared-comments">
+        Discussion partagée avec l’autre pôle : les commentaires anciens et nouveaux
+        sont visibles dans les deux cartes, y compris après la transmission.
+      </p>}
       {data?.comments.map(c => <article className="co-comment" key={c.id}>
         <div className="co-author-line">
           <span className="co-name" style={{borderColor:c.color||'#c0b5ab'}}>{displayName(c)}</span>
