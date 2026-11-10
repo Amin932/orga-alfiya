@@ -249,6 +249,12 @@ def test_communication_handoff_pipeline():
             assert denied.status_code==404
             denied_link=client.get(f"/api/cards/{destination_id}/collaboration")
             assert denied_link.status_code==404
+            forbidden_comment=client.patch(
+                f"/api/cards/{destination_id}/comments/{source_note_id}",
+                headers=headers,json={"body":"Texte modifie"})
+            assert forbidden_comment.status_code==404
+            forbidden_read=client.get(f"/api/cards/{source_id}/collaboration")
+            assert forbidden_read.status_code==404
             denied_add=client.post(f"/api/cards/{destination_id}/links",headers=headers,
                 json={"label":"Intrus","url":"https://example.com"})
             assert denied_add.status_code==404
