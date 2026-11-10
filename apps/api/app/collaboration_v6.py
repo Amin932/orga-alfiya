@@ -175,7 +175,7 @@ def unlink_stored_files(names):
 
 def register_collaboration_routes(app, db, current_user, require_request):
     def get_card(conn, card_id, user):
-        card = conn.execute("""SELECT c.id,c.deleted_at,p.project_id FROM cards c
+        card = conn.execute("""SELECT c.id,c.source_card_id,c.deleted_at,p.project_id FROM cards c
             JOIN poles p ON p.id=c.pole_id WHERE c.id=%s""", (card_id,)).fetchone()
         if not card or card["deleted_at"] is not None:
             raise HTTPException(404, "Carte introuvable")
@@ -184,6 +184,21 @@ def register_collaboration_routes(app, db, current_user, require_request):
             (user["id"], card["project_id"])).fetchone():
             raise HTTPException(404, "Carte introuvable")
         return card
+
+    def comment_thread_ids(conn, card):
+        """Return only this card and its linked handoff card, in the same project."""
+        if card["source_card_id"] is not None:
+            source = conn.execute("""SELECT c.id FROM cards c
+                JOIN poles p ON p.id=c.pole_id
+                WHERE c.id=%s AND p.project_id=%s""",
+                (card["source_card_id"], card["project_id"])).fetchone()
+            return [card["id"], source["id"]] if source else [card["id"]]
+        received = conn.execute("""SELECT c.id FROM cards c
+            JOIN poles p ON p.id=c.pole_id
+            WHERE c.source_card_id=%s AND c.deleted_at IS NULL
+              AND p.project_id=%s ORDER BY c.id LIMIT 1""",
+            (card["id"],card["project_id"])).fetchone()
+        return [card["id"], received["id"]] if received else [card["id"]]
 
     def validate_mentions(conn, card_id, user, text):
         card = get_card(conn, card_id, user)
@@ -227,13 +242,15 @@ def register_collaboration_routes(app, db, current_user, require_request):
     @app.get("/api/cards/{card_id}/collaboration")
     def collaboration(card_id: int, user=Depends(current_user)):
         with db() as conn:
-            get_card(conn,card_id,user)
+            card = get_card(conn,card_id,user)
+            thread_ids = comment_thread_ids(conn,card)
             comments = conn.execute("""SELECT cm.id,cm.body,cm.created_at,cm.updated_at,
                 cm.author_id,u.first_name,u.last_name,
                 (SELECT po.color FROM user_poles up JOIN poles po ON po.id=up.pole_id
                   WHERE up.user_id=cm.author_id ORDER BY up.position,po.id LIMIT 1) AS color
                 FROM card_comments cm JOIN users u ON u.id=cm.author_id
-                WHERE cm.card_id=%s AND cm.deleted_at IS NULL ORDER BY cm.id""",(card_id,)).fetchall()
+                WHERE cm.card_id=ANY(%s) AND cm.deleted_at IS NULL
+                ORDER BY cm.created_at,cm.id""",(thread_ids,)).fetchall()
             files = conn.execute("""SELECT a.id,a.file_name,a.mime_type,a.size_bytes,
                 a.created_at,a.uploaded_by,u.first_name,u.last_name,
                 a.id=(SELECT cover_attachment_id FROM cards WHERE id=%s) AS is_cover
@@ -247,7 +264,8 @@ def register_collaboration_routes(app, db, current_user, require_request):
                   WHERE up.user_id=ac.actor_id ORDER BY up.position,po.id LIMIT 1) AS color
                 FROM card_activity ac JOIN users u ON u.id=ac.actor_id
                 WHERE ac.card_id=%s ORDER BY ac.id DESC LIMIT 150""",(card_id,)).fetchall()
-        return {"comments":comments,"files":files,"links":links,"activity":activity}
+        return {"comments":comments,"files":files,"links":links,
+                "comments_shared":len(thread_ids)>1,"activity":activity}
 
     @app.post("/api/cards/{card_id}/links", status_code=201)
     def add_link(card_id: int, body: CardLinkInput, request: Request,
@@ -286,6 +304,8 @@ def register_collaboration_routes(app, db, current_user, require_request):
     def comment(card_id:int, body: CommentInput, request:Request, user=Depends(current_user)):
         require_request(request)
         with db() as conn:
+            card_context = get_card(conn,card_id,user)
+            thread_ids = comment_thread_ids(conn,card_context)
             mentions = validate_mentions(conn,card_id,user,body.body)
             cm = conn.execute("""INSERT INTO card_comments(card_id,author_id,body)
                 VALUES (%s,%s,%s) RETURNING id""",(card_id,user["id"],body.body.strip())).fetchone()
@@ -309,10 +329,18 @@ def register_collaboration_routes(app, db, current_user, require_request):
                 notify(conn,member_id,"mention","Vous avez été mentionné(e)",
                        f'Un membre vous a mentionné dans « {card["title"]} ».',card_id,
                        dedupe_key=f"mention:{cm['id']}:{member_id}",actor_id=user["id"])
-            for member_id in set(subscribers(conn,card_id))-mentioned:
-                notify(conn,member_id,"comment","Nouveau commentaire",
-                       f'Nouveau commentaire dans « {card["title"]} ».',card_id,
-                       dedupe_key=f"comment:{cm['id']}:{member_id}",actor_id=user["id"])
+            # Followers of either linked card get one notification per comment.
+            # Each notification opens a card that the recipient has followed.
+            watchers = {}
+            for thread_card_id in thread_ids:
+                for member_id in subscribers(conn,thread_card_id):
+                    watchers.setdefault(member_id,thread_card_id)
+            for member_id, notification_card in watchers.items():
+                if member_id not in mentioned:
+                    notify(conn,member_id,"comment","Nouveau commentaire",
+                           f'Nouveau commentaire dans « {card["title"]} ».',
+                           notification_card,
+                           dedupe_key=f"comment:{cm['id']}:{member_id}",actor_id=user["id"])
         return {"id":cm["id"],"status":"created"}
 
     @app.patch("/api/cards/{card_id}/comments/{comment_id}")
@@ -320,10 +348,11 @@ def register_collaboration_routes(app, db, current_user, require_request):
                      user=Depends(current_user)):
         require_request(request)
         with db() as conn:
+            card = get_card(conn,card_id,user)
             validate_mentions(conn,card_id,user,body.body)
             cm = conn.execute("""SELECT id,author_id FROM card_comments
-                WHERE id=%s AND card_id=%s AND deleted_at IS NULL FOR UPDATE""",
-                (comment_id,card_id)).fetchone()
+                WHERE id=%s AND card_id=ANY(%s) AND deleted_at IS NULL FOR UPDATE""",
+                (comment_id,comment_thread_ids(conn,card))).fetchone()
             if not cm:
                 raise HTTPException(404,"Commentaire introuvable")
             if cm["author_id"] != user["id"]:
@@ -341,10 +370,10 @@ def register_collaboration_routes(app, db, current_user, require_request):
     def delete_comment(card_id:int, comment_id:int, request:Request, user=Depends(current_user)):
         require_request(request)
         with db() as conn:
-            get_card(conn,card_id,user)
+            card = get_card(conn,card_id,user)
             cm = conn.execute("""SELECT author_id FROM card_comments
-                WHERE id=%s AND card_id=%s AND deleted_at IS NULL FOR UPDATE""",
-                (comment_id,card_id)).fetchone()
+                WHERE id=%s AND card_id=ANY(%s) AND deleted_at IS NULL FOR UPDATE""",
+                (comment_id,comment_thread_ids(conn,card))).fetchone()
             if not cm:
                 raise HTTPException(404,"Commentaire introuvable")
             if cm["author_id"] != user["id"] and user["role"] != "superadmin":
