@@ -194,6 +194,11 @@ def test_communication_handoff_pipeline():
             copied_links=client.get(f"/api/cards/{destination_id}/collaboration").json()["links"]
             assert len(copied_links)==1
             assert copied_links[0]["url"]=="https://zoom.us/j/123456789"
+            thread=client.get(f"/api/cards/{destination_id}/collaboration").json()
+            assert thread["comments_shared"] is True
+            assert len(thread["comments"]) == 1
+            assert thread["comments"][0]["id"] == source_note_id
+            assert thread["comments"][0]["first_name"] == "Camille"
             assert not any(item["done"] for item in new_content["checklists"][0]["items"])
             again=client.post(f"/api/cards/{source_id}/send-to-communication",headers=headers,json={})
             assert again.status_code==409
