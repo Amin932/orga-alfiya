@@ -334,7 +334,14 @@ def register_collaboration_routes(app, db, current_user, require_request):
             watchers = {}
             for thread_card_id in thread_ids:
                 for member_id in subscribers(conn,thread_card_id):
-                    watchers.setdefault(member_id,thread_card_id)
+                    permitted = conn.execute("""SELECT 1 FROM users u
+                        LEFT JOIN project_access pa ON pa.user_id=u.id
+                            AND pa.project_id=%s
+                        WHERE u.id=%s AND u.active=true
+                          AND (u.role='superadmin' OR pa.user_id IS NOT NULL)""",
+                        (card_context["project_id"],member_id)).fetchone()
+                    if permitted:
+                        watchers.setdefault(member_id,thread_card_id)
             for member_id, notification_card in watchers.items():
                 if member_id not in mentioned:
                     notify(conn,member_id,"comment","Nouveau commentaire",
