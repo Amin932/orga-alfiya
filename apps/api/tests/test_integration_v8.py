@@ -236,6 +236,10 @@ def test_communication_handoff_pipeline():
                 json={"status":"done","before_id":None})
             assert done.status_code==200,done.text
             assert client.get(f"/api/poles/{communication}/cards").json()["cards"][0]["status"]=="done"
+            updated=client.patch(f"/api/cards/{source_id}/comments/{reply_id}",
+                headers=headers,json={"body":"Visuel finalise et lien Eventbrite ajoute."})
+            assert updated.status_code==200,updated.text
+            assert client.get(f"/api/cards/{destination_id}/collaboration").json()["comments"][-1]["body"].startswith("Visuel finalise")
             cannot_send_again=client.post(f"/api/cards/{destination_id}/send-to-communication",
                 headers=headers,json={})
             assert cannot_send_again.status_code==422
