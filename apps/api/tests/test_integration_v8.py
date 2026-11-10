@@ -161,6 +161,10 @@ def test_communication_handoff_pipeline():
                 json={"label":"Réunion Zoom","url":"https://zoom.us/j/123456789"})
             assert zoom_link.status_code==201,zoom_link.text
             assert client.get(f"/api/cards/{source_id}/collaboration").json()["links"][0]["label"]=="Réunion Zoom"
+            note=client.post(f"/api/cards/{source_id}/comments",headers=headers,
+                json={"body":"Visuel sans visage, fond discret, merci."})
+            assert note.status_code==201,note.text
+            source_note_id=note.json()["id"]
             edit=client.patch(f"/api/cards/{source_id}/template-values",headers=headers,
                 json={"values":{"budget":"130 EUR"}})
             assert edit.status_code==200,edit.text
